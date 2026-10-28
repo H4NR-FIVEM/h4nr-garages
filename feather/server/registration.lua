@@ -20,10 +20,10 @@ function Garage.Lock(key, fn)
     return result
 end
 function Garage.Row(assetId)
-    return MySQL.single.await('SELECT * FROM h4nr_feather_vehicles WHERE asset_id = ?', { assetId })
+    return DB.one('SELECT * FROM h4nr_feather_vehicles WHERE asset_id = ?', assetId)
 end
 function Garage.Migrate()
-    MySQL.query.await([[
+    DB.exec([[
         CREATE TABLE IF NOT EXISTS h4nr_feather_vehicles (
             order_id CHAR(36) NOT NULL PRIMARY KEY,
             asset_id CHAR(36) NULL UNIQUE,
@@ -64,14 +64,14 @@ function Garage.Register(request)
     end
     props = { color1 = props.color1, color2 = props.color2 }
     return Garage.Lock('order:' .. request.orderId, function()
-        local row = MySQL.single.await('SELECT * FROM h4nr_feather_vehicles WHERE order_id = ?', { request.orderId })
+        local row = DB.one('SELECT * FROM h4nr_feather_vehicles WHERE order_id = ?', request.orderId)
         if not row then
             local encoded = json.encode(props)
-            MySQL.insert.await([[INSERT INTO h4nr_feather_vehicles
+            DB.insert([[INSERT INTO h4nr_feather_vehicles
                 (order_id,asset_type,model_key,buyer_id,purchase_props,props_json,plate,garage)
-                VALUES (?,?,?,?,?,?,?,?)]], { request.orderId, request.assetType, request.modelKey,
-                request.holderId, encoded, encoded, request.plate, garageId })
-            row = MySQL.single.await('SELECT * FROM h4nr_feather_vehicles WHERE order_id = ?', { request.orderId })
+                VALUES (?,?,?,?,?,?,?,?)]], request.orderId, request.assetType, request.modelKey,
+                request.holderId, encoded, encoded, request.plate, garageId)
+            row = DB.one('SELECT * FROM h4nr_feather_vehicles WHERE order_id = ?', request.orderId)
         end
         local original = json.decode(row.purchase_props)
         if row.asset_type ~= request.assetType or row.model_key ~= request.modelKey or row.buyer_id ~= request.holderId
@@ -99,7 +99,7 @@ function Garage.Register(request)
                 asset = read.value
             else return registered end
             if not OwnedPurchase(asset, row) then return Garage.Err('purchase_mismatch') end
-            MySQL.update.await('UPDATE h4nr_feather_vehicles SET asset_id = ? WHERE order_id = ?', { asset.assetId, row.order_id })
+            DB.exec('UPDATE h4nr_feather_vehicles SET asset_id = ? WHERE order_id = ?', asset.assetId, row.order_id)
         end
         local current = assets:GetAsset({ assetId = asset.assetId })
         if not current.ok then return current end
@@ -117,8 +117,8 @@ function Garage.Register(request)
             end
             plate = assigned.value.identifiers.plate
         end
-        MySQL.update.await([[UPDATE h4nr_feather_vehicles SET plate = ?, status = 'stored'
-            WHERE order_id = ? AND status = 'registering']], { plate, row.order_id })
+        DB.exec([[UPDATE h4nr_feather_vehicles SET plate = ?, status = 'stored'
+            WHERE order_id = ? AND status = 'registering']], plate, row.order_id)
         return Garage.Ok({ assetId = asset.assetId, plate = plate, garage = row.garage })
     end)
 end

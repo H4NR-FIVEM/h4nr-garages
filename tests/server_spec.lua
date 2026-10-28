@@ -27,7 +27,7 @@ local caller = 'h4nr-vehicleshop'
 local function findRow(id)
     for _, row in pairs(rows) do if row.asset_id == id then return row end end
 end
-MySQL = { query = {}, insert = {}, single = {}, update = {} }
+local MySQL = { query = {}, insert = {}, single = {}, update = {} }
 function MySQL.query.await(sql)
     if sql:find('CREATE TABLE') then return {} end
     local result = {}
@@ -63,6 +63,16 @@ function MySQL.update.await(sql,p)
         row.status = status; return 1
     end
 end
+-- feather-mysql surface over the modeled statements above.
+DB = {
+    query = function(sql, ...) return MySQL.query.await(sql, { ... }) end,
+    one = function(sql, ...) return MySQL.single.await(sql, { ... }) end,
+    insert = function(sql, ...) return MySQL.insert.await(sql, { ... }) end,
+    exec = function(sql, ...)
+        if sql:find('CREATE TABLE') then return 0 end
+        return MySQL.update.await(sql, { ... })
+    end,
+}
 local domainEnv = setmetatable({ exports = function() end }, { __index = _G })
 assert(loadfile(ROOT .. '/../../[feather]/feather-assets/server/foundation.lua', 't', domainEnv))()
 local assets = {}

@@ -103,7 +103,7 @@ local function Retrieve(source, params)
         if row.garage ~= params.garage or asset.assetType ~= garage.assetType then return Garage.Err('invalid_garage') end
         if Vehicle(params.assetId) then return Garage.Err('already_out') end
         if row.status == 'out' or row.status == 'spawning' or row.status == 'storing' then
-            MySQL.update.await("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status IN ('out','spawning','storing')", { params.assetId })
+            DB.exec("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status IN ('out','spawning','storing')", params.assetId)
             row.status = 'stored'
         end
         if row.status ~= 'stored' then return Garage.Err('busy') end
@@ -115,8 +115,8 @@ local function Retrieve(source, params)
         local kind = SpawnType(asset.modelKey, asset.assetType)
         if not kind then return Garage.Err('spawn_failed') end
         if not Owns(source, params.assetId) or not AtGarage(source, params.garage) then return Garage.Err('forbidden') end
-        local changed = MySQL.update.await([[UPDATE h4nr_feather_vehicles SET status = 'spawning'
-            WHERE asset_id = ? AND status = 'stored']], { params.assetId })
+        local changed = DB.exec([[UPDATE h4nr_feather_vehicles SET status = 'spawning'
+            WHERE asset_id = ? AND status = 'stored']], params.assetId)
         if changed ~= 1 then return Garage.Err('busy') end
         local props = json.decode(row.props_json)
         props.plate, props.model = asset.identifiers.plate, joaat(asset.modelKey)
@@ -124,7 +124,7 @@ local function Retrieve(source, params)
         local ok, netId, entity = pcall(FeatherVehicles.spawnVehicle, {
             model = asset.modelKey, type = kind, spawnSource = garage.spawn, props = props, bucket = 0 })
         if not ok or not netId then
-            MySQL.update.await("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status = 'spawning'", { params.assetId })
+            DB.exec("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status = 'spawning'", params.assetId)
             return Garage.Err('spawn_failed')
         end
         live[params.assetId] = entity
@@ -132,7 +132,7 @@ local function Retrieve(source, params)
         Entity(entity).state:set('h4nrGarageEngine', false, true)
         SetEntityOrphanMode(entity, 2)
         SetVehicleDoorsLocked(entity, 1)
-        MySQL.update.await("UPDATE h4nr_feather_vehicles SET status = 'out' WHERE asset_id = ?", { params.assetId })
+        DB.exec("UPDATE h4nr_feather_vehicles SET status = 'out' WHERE asset_id = ?", params.assetId)
         if not Owns(source, params.assetId) then
             SetVehicleDoorsLocked(entity, 2)
             return Garage.Err('forbidden')
@@ -162,17 +162,17 @@ local function Store(source, params)
         local encoded = json.encode(props)
         if #encoded > 16384 then return Garage.Err('invalid_input') end
         -- Persist before deletion. Recovery never marks a surviving entity stored.
-        MySQL.update.await([[UPDATE h4nr_feather_vehicles SET props_json = ?, garage = ?, status = 'storing'
-            WHERE asset_id = ?]], { encoded, params.garage, params.assetId })
+        DB.exec([[UPDATE h4nr_feather_vehicles SET props_json = ?, garage = ?, status = 'storing'
+            WHERE asset_id = ?]], encoded, params.garage, params.assetId)
         DeleteEntity(vehicle)
         local deadline = GetGameTimer() + 3000
         while DoesEntityExist(vehicle) and GetGameTimer() < deadline do Wait(50) end
         if DoesEntityExist(vehicle) then
-            MySQL.update.await("UPDATE h4nr_feather_vehicles SET status = 'out' WHERE asset_id = ?", { params.assetId })
+            DB.exec("UPDATE h4nr_feather_vehicles SET status = 'out' WHERE asset_id = ?", params.assetId)
             return Garage.Err('unavailable')
         end
         live[params.assetId] = nil
-        MySQL.update.await("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ?", { params.assetId })
+        DB.exec("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ?", params.assetId)
         return Garage.Ok(true)
     end)
 end
@@ -211,10 +211,10 @@ CreateThread(function()
         Garage.Migrate()
         local ready = assets:AwaitReady(30000)
         assert(ready.ok, ready.code)
-        local rows = MySQL.query.await("SELECT asset_id FROM h4nr_feather_vehicles WHERE status IN ('spawning','storing','out')") or {}
+        local rows = DB.query("SELECT asset_id FROM h4nr_feather_vehicles WHERE status IN ('spawning','storing','out')") or {}
         for _, row in ipairs(rows) do
-            MySQL.update.await('UPDATE h4nr_feather_vehicles SET status = ? WHERE asset_id = ?',
-                { Vehicle(row.asset_id) and 'out' or 'stored', row.asset_id })
+            DB.exec('UPDATE h4nr_feather_vehicles SET status = ? WHERE asset_id = ?',
+                Vehicle(row.asset_id) and 'out' or 'stored', row.asset_id)
         end
         Garage.ready = true
     end)
