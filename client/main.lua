@@ -1,19 +1,5 @@
 local menu = exports['feather-menu-v2']
 local activeMenu, opening = nil, false
-local messages = {
-    ro = { retrieve = 'Scoate vehiculul', stored = 'Parcat', out = 'Scos', unavailable = 'Vehicul indisponibil aici',
-        failed = 'Operația nu a reușit. Încearcă din nou.', forbidden = 'Nu ai acces la acest vehicul.',
-        spawn_blocked = 'Locul de scoatere este ocupat.', already_out = 'Vehiculul este deja scos.',
-        parked = 'Vehicul parcat.', next = 'Pagina următoare', close = 'Închide',
-        prompt = '~INPUT_CONTEXT~ Garaj', store = '~INPUT_CONTEXT~ Parchează vehiculul',
-        locked = 'Vehicul încuiat.', unlocked = 'Vehicul descuiat.', lock_key = 'Încuie / descuie vehiculul', engine_key = 'Pornește / oprește motorul' },
-    en_us = { retrieve = 'Retrieve vehicle', stored = 'Stored', out = 'Out', unavailable = 'Vehicle unavailable here',
-        failed = 'Operation failed. Try again.', forbidden = 'You do not have access to this vehicle.',
-        spawn_blocked = 'The spawn point is occupied.', already_out = 'Vehicle is already out.', parked = 'Vehicle stored.',
-        next = 'Next page', close = 'Close', prompt = '~INPUT_CONTEXT~ Garage', store = '~INPUT_CONTEXT~ Store vehicle',
-        locked = 'Vehicle locked.', unlocked = 'Vehicle unlocked.', lock_key = 'Lock / unlock vehicle', engine_key = 'Toggle engine' }
-}
-local function T(key) return (messages[GarageConfig.DefaultLang] or messages.en_us)[key] or messages.en_us[key] or messages.en_us.failed end
 local function Notify(key)
     exports['feather-notify']:ShowNotification({ style = 'right', message = T(key), duration = 4000 })
 end

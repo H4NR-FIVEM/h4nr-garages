@@ -18,7 +18,7 @@ ensure h4nr-vehicleshop
 
 - In `feather-admin`, the policies must allow `assets.asset.manage` for `h4nr-garages`, and Feather Assets must list it in `trustedReaders` and `trustedManagers`. These entries already exist in the local FiveM configuration.
 - On start the resource creates only its own table, `h4nr_feather_vehicles`. Ownership lives in Feather Assets. The old QB `player_vehicles` table is never read or written, and old vehicles are not imported automatically.
-- The live configuration is `feather/config.lua`: locations, vehicle types and default garages. The manifest only loads files from `feather/`.
+- The live configuration is `config/shared.lua`: locations, vehicle types and default garages. Texts are in `languages/`. The old QB implementation is no longer kept in this folder.
 
 ## In game
 

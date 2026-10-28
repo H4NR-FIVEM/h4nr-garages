@@ -25,7 +25,7 @@ FeatherRPC={CallAsync=function(_,name,params)
     calls[#calls+1]=params
     return table.remove(pages,1)
 end}
-dofile(ROOT .. '/feather/client/vehicle_blips.lua')
+dofile(ROOT .. '/client/vehicle_blips.lua')
 local function item(id,x) return {assetId=id,plate='LS12 ABC',coords={x=x,y=20,z=30}} end
 GarageVehicleBlips.Update({item('car',10)})
 check('creates long range car blip without a streamed entity', handles[1].coords[1]==10 and handles[1].short==false and handles[1].sprite==225)

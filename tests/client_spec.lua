@@ -157,9 +157,12 @@ replies['h4nr-garages:list'] = { ok=true, value={items={
     {assetId='other',model='adder',plate='LS99 XYZ',state='stored',available=false}
 }} }
 replies['h4nr-garages:retrieve'] = {ok=true,value={netId=12}}
-dofile(root .. '/feather/config.lua')
+dofile(root .. '/config/shared.lua')
+dofile(root .. '/locale.lua')
+dofile(root .. '/languages/ro.lua')
+dofile(root .. '/languages/en_us.lua')
 ped.coords = GarageConfig.Garages.pillboxgarage.coords
-dofile(root .. '/feather/client/main.lua')
+dofile(root .. '/client/main.lua')
 local currentMenu = api.GetHealth().value.activeMenuId
 check('garage opens actual Menu v2', currentMenu ~= nil)
 local state = api.GetMenuState(currentMenu).value

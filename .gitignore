@@ -1,11 +1,1 @@
-# Legacy QB implementation retained locally; the Feather manifest does not load it.
-/client.lua
-/config.lua
-/dbUpdater.lua
-/garages.sql
-/locale.lua
-/server.lua
-/languages/
-/html/
-/ui/
 __pycache__/

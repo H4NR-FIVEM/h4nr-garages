@@ -118,8 +118,8 @@ function GetCurrentResourceName() return 'h4nr-garages' end
 function CreateThread(fn) threads[#threads+1]=fn end
 function Wait() end
 FeatherRPC={Register=function(_,name,fn) rpc[name]=fn end}
-dofile(ROOT .. '/feather/config.lua')
-dofile(ROOT .. '/feather/server/registration.lua')
+dofile(ROOT .. '/config/shared.lua')
+dofile(ROOT .. '/server/registration.lua')
 local request={orderId=orderId,assetType='vehicle',modelKey='t20',holderType='character',holderId=A,
     plate='LS12 ABC',props={color1=27,color2=0},garage='pillboxgarage'}
 check('not ready refuses registration', api.RegisterPurchasedVehicle(request).code=='unavailable')
@@ -195,7 +195,7 @@ FeatherVehicles={spawnVehicle=function(spec)
     local entity=CreateVehicle(); coords[entity]=vector3(spec.spawnSource.x,spec.spawnSource.y,spec.spawnSource.z)
     return entity+100,entity
 end}
-dofile(ROOT .. '/feather/server/main.lua')
+dofile(ROOT .. '/server/main.lua')
 for _,fn in ipairs(threads) do fn() end
 local function call(name,params,source)
     local result; rpc['h4nr-garages:'..name](params,function(value) result=value end,source or 1); return result

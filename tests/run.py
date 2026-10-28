@@ -1,4 +1,4 @@
-"""Lua 5.4 syntax check of the resource and the offline server spec (liblua5.4 via ctypes)."""
+"""Lua 5.4 syntax check of the resource, ro/en_us key parity, then every tests/*_spec.lua (liblua5.4 via ctypes)."""
 import ctypes, ctypes.util, re, sys
 from pathlib import Path
 
@@ -35,5 +35,16 @@ files = [p for p in root.rglob('*.lua') if '.git' not in p.parts]
 for path in files:
     run(path.read_text(), path, False)
 print(f'Lua syntax: {len(files)} files passed', flush=True)
+KEY_PARITY = '''
+dofile(ROOT .. '/languages/ro.lua')
+dofile(ROOT .. '/languages/en_us.lua')
+for name, other in pairs({ ro = 'en_us', en_us = 'ro' }) do
+    for key in pairs(Locales[name]) do
+        assert(Locales[other][key] ~= nil, ('languages/%s.lua lacks %s'):format(other, key))
+    end
+end
+'''
+run(KEY_PARITY, 'key_parity', True)
+print('Languages: ro and en_us have the same keys', flush=True)
 for spec in sorted((root / 'tests').glob('*_spec.lua')):
     run(spec.read_text(), spec, True)
