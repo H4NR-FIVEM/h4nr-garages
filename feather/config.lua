@@ -1,6 +1,7 @@
 GarageConfig = {
     DefaultLang = 'ro',
     Distance = 3.0,
+    VehicleBlip = { enabled = true, refreshMs = 5000, sprite = 225, color = 3, scale = 0.75 },
     TrustedShops = { ['h4nr-vehicleshop'] = true },
     DefaultGarage = { vehicle = 'pillboxgarage', boat = 'marina', aircraft = 'lsia' },
     Garages = {

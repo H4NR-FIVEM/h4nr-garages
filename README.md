@@ -33,6 +33,11 @@ Nu există import automat al vehiculelor vechi.
   Tastele se pot schimba în setările FiveM.
 - Ca șofer, apasă **E** lângă punctul de scoatere sau garaj pentru a parca.
 - La parcare se păstrează proprietățile GTA, avariile și combustibilul.
+- Vehiculele proprii scoase au un blip albastru „Vehiculul meu · NUMĂR” pe hartă,
+  inclusiv când sunt departe. Poziția se actualizează la 5 secunde. Blipul dispare
+  la parcare, dispariția entității, ieșirea personajului sau pierderea proprietății.
+  Sunt urmărite numai vehiculele din aceeași sesiune; test drive-urile nu sunt incluse.
+  Configurare: `GarageConfig.VehicleBlip` (enabled, refreshMs, sprite, color, scale).
 
 Locații implicite: Pillbox pentru mașini, Puerto del Sol pentru bărci și LSIA
 pentru aeronave. Accesul public este disponibil în bucketul 0. Scoaterea este
@@ -67,12 +72,13 @@ este refuzată. Înregistrarea din fundal funcționează și cu personajul offli
 python3 tests/run.py
 ```
 
-46 de verificări: 37 server (inclusiv validatoarele reale Assets) și 9 client
+64 de verificări: 45 server (inclusiv validatoarele reale Assets), 10 pentru
+blipuri și 9 client
 peste Menu v2 real, cu SQL/nativele simulate. Sintaxa tuturor fișierelor Lua
 este verificată. Testele nu reprezintă acceptare în joc.
 
 Verificarea în joc încă necesară: cumpărare numerar/bancă, reluare după eroare,
-scoatere/parcare, culori, modificări, combustibil, tastele U/G, reconnect și restart
+scoatere/parcare, culori, modificări, combustibil, tastele U/G, blipurile de aproape/departe și dispariția la parcare, reconnect și restart
 cu vehicul afară, toate cele trei tipuri și refuzul accesului unui al doilea personaj.
 La restart, vehiculele încă existente sunt reatașate prin `asset_id`; cele dispărute
 redevin disponibile în garaj. Nu se promite salvarea poziției sau a avariilor produse

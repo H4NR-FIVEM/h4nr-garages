@@ -158,8 +158,9 @@ local entities,states,drivers,locks={}, {}, {}, {}
 local nextEntity, clock, spawnCount=10,0,0
 function GetPlayerPed(source) return source end
 function GetEntityCoords(entity) return coords[entity] or vector3(0,0,0) end
-function GetPlayerRoutingBucket() return 0 end
-function GetEntityRoutingBucket() return 0 end
+local playerBuckets, entityBuckets = {}, {}
+function GetPlayerRoutingBucket(source) return playerBuckets[source] or 0 end
+function GetEntityRoutingBucket(entity) return entityBuckets[entity] or 0 end
 function GetAllVehicles() local all={}; for id in pairs(entities) do all[#all+1]=id end; return all end
 function DoesEntityExist(entity) return entities[entity]==true end
 function Entity(entity)
@@ -190,6 +191,8 @@ local function call(name,params,source)
     local result; rpc['h4nr-garages:'..name](params,function(value) result=value end,source or 1); return result
 end
 check('startup ready', Garage.ready)
+check('parked cars have no live map location', #call('locations',{}).value.items == 0)
+check('invalid location cursor rejected', call('locations',{cursor='invalid'}).code == 'invalid_input')
 check('owner sees purchased vehicle', #call('list',{garage='pillboxgarage'}).value.items==1)
 check('other character cannot see vehicle', #call('list',{garage='pillboxgarage'},2).value.items==0)
 local spec={garage='pillboxgarage',assetId=assetId}
@@ -202,6 +205,19 @@ check('owner retrieves once', spawned.ok and spawnCount==1 and rows[orderId].sta
 check('double retrieval cannot duplicate entity', call('retrieve',spec).code=='already_out' and spawnCount==1)
 local entity=spawned.value.netId-100
 check('entity identity uses asset UUID', Entity(entity).state.h4nrAssetId==assetId)
+coords[1] = vector3(5000, 5000, 30)
+local location = call('locations',{}).value.items[1]
+check('owner receives car coordinates from anywhere', location and location.assetId == assetId
+    and location.coords.x == coords[entity].x and location.plate == 'LS99 XYZ')
+check('another player cannot query owner locations', #call('locations',{holderId=A},2).value.items == 0)
+entityBuckets[entity] = 7
+check('locations do not cross private sessions', #call('locations',{}).value.items == 0)
+entityBuckets[entity] = nil
+assetsById[assetId].owner.holderId = B
+check('former owner loses tracking after sale', #call('locations',{}).value.items == 0)
+check('new owner gains tracking after sale', #call('locations',{},2).value.items == 1)
+assetsById[assetId].owner.holderId = A
+
 coords[1],coords[2]=coords[entity],coords[entity]
 check('non-owner cannot lock', call('keys',{assetId=assetId,action='lock'},2).code=='forbidden')
 check('owner locks', call('keys',{assetId=assetId,action='lock'}).value.locked and locks[entity]==2)
@@ -214,6 +230,7 @@ refuseDelete=true
 check('failed entity deletion does not mark stored', not call('store',spec).ok and rows[orderId].status=='out')
 refuseDelete=false
 check('owner parks at spawn point', call('store',spec).ok and rows[orderId].status=='stored' and not entities[entity])
+check('parking removes location', #call('locations',{}).value.items == 0)
 local saved=json.decode(rows[orderId].props_json)
 check('server preserves authoritative plate', saved.plate=='LS99 XYZ')
 check('damage and fuel persist', saved.engineHealth==900 and saved.fuelLevel==55)

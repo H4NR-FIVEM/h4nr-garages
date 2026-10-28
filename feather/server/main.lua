@@ -65,6 +65,33 @@ local function List(source, params)
     end
     return Garage.Ok({ items = items, nextCursor = result.value.nextCursor })
 end
+-- Coordinates are resolved server-side from current ownership, even when the
+-- entity is outside the owner's streaming range. No arbitrary holder is accepted.
+local function Locations(source, params)
+    local character = Character(source)
+    if not character then return Garage.Err('forbidden') end
+    if params.cursor ~= nil and not Garage.Uuid(params.cursor) then return Garage.Err('invalid_input') end
+    local result = assets:ListAssetsByHolder({ holderType = 'character', holderId = character,
+        limit = 50, cursor = params.cursor })
+    if not result.ok then return result end
+    local entities, items = {}, {}
+    local bucket = GetPlayerRoutingBucket(source)
+    for _, vehicle in ipairs(GetAllVehicles()) do
+        local assetId = Entity(vehicle).state.h4nrAssetId
+        if assetId and GetEntityRoutingBucket(vehicle) == bucket then entities[assetId] = vehicle end
+    end
+    for _, asset in ipairs(result.value.items) do
+        local vehicle = entities[asset.assetId]
+        if vehicle and asset.managerResource == GetCurrentResourceName() and asset.status ~= 'retired'
+            and DoesEntityExist(vehicle) then
+            local at = GetEntityCoords(vehicle)
+            items[#items + 1] = { assetId = asset.assetId, plate = asset.identifiers and asset.identifiers.plate,
+                coords = { x = at.x, y = at.y, z = at.z } }
+        end
+    end
+    if Character(source) ~= character then return Garage.Err('forbidden') end
+    return Garage.Ok({ characterId = character, items = items, nextCursor = result.value.nextCursor })
+end
 local function Retrieve(source, params)
     local garage = AtGarage(source, params.garage)
     if not garage or not Owns(source, params.assetId) then return Garage.Err('forbidden') end
@@ -166,7 +193,7 @@ local function Keys(source, params)
     end
     return Garage.Err('forbidden')
 end
-for name, handler in pairs({ list = List, retrieve = Retrieve, store = Store, keys = Keys }) do
+for name, handler in pairs({ list = List, locations = Locations, retrieve = Retrieve, store = Store, keys = Keys }) do
     local operation = handler
     FeatherRPC:Register('h4nr-garages:' .. name, function(params, respond, source)
         if not Garage.ready then return respond(Garage.Err('unavailable')) end
