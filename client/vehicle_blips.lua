@@ -4,7 +4,9 @@ local blips = {}
 local config = GarageConfig.VehicleBlip
 
 function GarageVehicleBlips.Clear()
-    for _, entry in pairs(blips) do RemoveBlip(entry.handle) end
+    for _, entry in pairs(blips) do
+        RemoveBlip(entry.handle)
+    end
     blips = {}
 end
 
@@ -35,7 +37,10 @@ function GarageVehicleBlips.Update(items)
         end
     end
     for assetId, entry in pairs(blips) do
-        if not seen[assetId] then RemoveBlip(entry.handle); blips[assetId] = nil end
+        if not seen[assetId] then
+            RemoveBlip(entry.handle)
+            blips[assetId] = nil
+        end
     end
 end
 
@@ -53,14 +58,24 @@ function GarageVehicleBlips.Refresh()
             return GarageVehicleBlips.Clear()
         end
         local page = result.value
-        if characterId and page.characterId ~= characterId then return GarageVehicleBlips.Clear() end
+        if characterId and page.characterId ~= characterId then
+            return GarageVehicleBlips.Clear()
+        end
         characterId = page.characterId
-        for _, item in ipairs(page.items) do items[#items + 1] = item end
+        for _, item in ipairs(page.items) do
+            items[#items + 1] = item
+        end
         cursor = page.nextCursor
-        if cursor and seenCursors[cursor] then return GarageVehicleBlips.Clear() end
-        if cursor then seenCursors[cursor] = true end
+        if cursor and seenCursors[cursor] then
+            return GarageVehicleBlips.Clear()
+        end
+        if cursor then
+            seenCursors[cursor] = true
+        end
     until not cursor
-    if not exports['feather-character']:HasActiveCharacter() then return GarageVehicleBlips.Clear() end
+    if not exports['feather-character']:HasActiveCharacter() then
+        return GarageVehicleBlips.Clear()
+    end
     GarageVehicleBlips.Update(items)
 end
 
