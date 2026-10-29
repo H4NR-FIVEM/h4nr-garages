@@ -73,3 +73,29 @@ GPL-3.0, see `LICENSE`.
 Model names may include hyphens (for example `f-one49d`) with Feather Assets
 0.2.2 or later. Version 2.0.2 admits these names through the purchase registration
 contract; ownership and spawning continue to use the exact original model name.
+
+
+## Marcaje, prompt și deschiderea listei — 2.0.3
+
+La maximum 25 m se vede o săgeată verde ca la joburi. Pe jos, aceasta marchează
+intrarea garajului; la volan, marchează punctul de parcare/scoatere. Promptul
+Feather Toolkit arată E — Deschide garajul sau E — Parchează vehiculul. Parcarea
+este oferită doar șoferului unui vehicul gestionat de garaj; serverul verifică în
+continuare proprietatea, distanța și sesiunea. `GarageConfig.Marker` configurează
+tipul, raza de afișare, mărimea și culoarea.
+
+Lista și coordonatele pentru blipuri sunt citiri și nu mai ocupă blocajul pentru
+operațiile pe vehicul. Retrieve/store/keys rămân serializate. Testele reproduc un
+poll de hartă suspendat în timp ce se deschide lista și confirmă că o citire nu
+eliberează blocajul unei mutații în curs. Meniul așteaptă readiness NUI.
+
+Transportul RPC (inclusiv al doilea rezultat nil/error) și refuzurile serverului
+sunt diagnosticate explicit. În locul unui eșec generic, apar traduceri pentru
+busy, timeout, sesiune, distanță, readiness și autorizare; codurile necunoscute sunt
+incluse în mesaj. F8 raportează `[h4nr-garages] RPC list refused: code=...`, iar
+serverul înregistrează refuzurile listei fără datele inventarului sau identități.
+Cauza exactă a incidentului raportat în joc nu a fost confirmată printr-un cod live;
+remedierea concurenței și mesajele au fost validate offline, nu în FiveM.
+
+După actualizare: `refresh`, apoi `restart h4nr-garages`. Toolkit trebuie pornit;
+este acum dependență declarată. Nu s-a efectuat restart de către agent.

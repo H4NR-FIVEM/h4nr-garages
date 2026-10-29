@@ -312,21 +312,30 @@ local function Keys(source, params)
 end
 for name, handler in pairs({ list = List, locations = Locations, retrieve = Retrieve, store = Store, keys = Keys }) do
     local operation = handler
+    local mutating = name ~= 'list' and name ~= 'locations'
+    local route = name
     FeatherRPC:Register('h4nr-garages:' .. name, function(params, respond, source)
         if not Garage.ready then
-            return respond(Garage.Err('unavailable'))
+            return respond(Garage.Err('not_ready'))
         end
         if type(params) ~= 'table' then
             return respond(Garage.Err('invalid_input'))
         end
-        if playersBusy[source] then
+        if mutating and playersBusy[source] then
             return respond(Garage.Err('busy'))
         end
-        playersBusy[source] = true
+        if mutating then
+            playersBusy[source] = true
+        end
         local ok, result = pcall(operation, source, params)
-        playersBusy[source] = nil
+        if mutating then
+            playersBusy[source] = nil
+        end
         if not ok then
             print('[h4nr-garages] request failed: ' .. tostring(result))
+        end
+        if ok and route == 'list' and type(result) == 'table' and not result.ok then
+            print(('[h4nr-garages] list refused: source=%s code=%s'):format(source, tostring(result.code)))
         end
         respond(ok and result or Garage.Err('unavailable'))
     end)

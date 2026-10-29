@@ -67,9 +67,11 @@ function GetCurrentResourceName()
     return 'h4nr-garages'
 end
 
+local backgroundTasks = {}
 -- Threads run until their first Wait; that is enough for these flows.
 function CreateThread(fn)
     local co = coroutine.create(fn)
+    backgroundTasks[#backgroundTasks + 1] = co
     local ok, problem = coroutine.resume(co)
     if not ok then
         error(problem, 0)
@@ -294,8 +296,19 @@ function RegisterKeyMapping() end
 function GetResourceState()
     return 'stopped'
 end
+local currentVehicle = 0
 function GetVehiclePedIsIn()
-    return 0
+    return currentVehicle
+end
+function GetPedInVehicleSeat()
+    return 1
+end
+function Entity()
+    return { state = { h4nrAssetId = '11111111-1111-1111-1111-111111111111', h4nrGarageEngine = true } }
+end
+local markers = {}
+function DrawMarker(kind, x, y, z)
+    markers[#markers + 1] = { kind = kind, x = x, y = y, z = z }
 end
 function AddBlipForCoord()
     return 1
@@ -367,4 +380,41 @@ check(
 )
 check('successful retrieval releases menu focus', api.GetHealth().value.activeMenuId == nil)
 check('owner key commands registered', commands.feathervehiclelock and commands.feathervehicleengine)
+check(
+    'job-style arrow marks the garage',
+    markers[1].kind == 2 and markers[1].x == GarageConfig.Garages.pillboxgarage.coords.x
+)
+local sawHint = false
+for _, hint in ipairs(hints) do
+    if hint and hint.tabs[1].controls[1].key == 'E' and hint.tabs[1].controls[1].label == T('open_label') then
+        sawHint = true
+    end
+end
+check('on-foot prompt explains E interaction', sawHint)
+local mainTask = backgroundTasks[1]
+local function frame()
+    local ok, problem = coroutine.resume(mainTask)
+    assert(ok, problem)
+end
+currentVehicle = 77
+ped.coords = vector3(
+    GarageConfig.Garages.pillboxgarage.spawn.x,
+    GarageConfig.Garages.pillboxgarage.spawn.y,
+    GarageConfig.Garages.pillboxgarage.spawn.z
+)
+frame()
+check('driver sees parking marker at the spawn point', markers[#markers].x == ped.coords.x)
+check('driver prompt offers E to park', hints[#hints].tabs[1].controls[1].label == T('store_label'))
+currentVehicle = 0
+ped.coords = GarageConfig.Garages.pillboxgarage.coords
+pressed = true
+replies['h4nr-garages:list'] = function()
+    return nil, { code = 'timeout' }
+end
+frame()
+check('transport errors show a precise translated cause', notes[#notes] == T('timeout'))
+pressed = true
+replies['h4nr-garages:list'] = { ok = false, code = 'test_unknown_code' }
+frame()
+check('unknown server refusal exposes its stable code', notes[#notes]:find('test_unknown_code', 1, true) ~= nil)
 print(('client_spec: %d checks passed'):format(passed))

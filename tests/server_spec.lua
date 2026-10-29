@@ -385,6 +385,26 @@ local function call(name, params, source)
     return result
 end
 check('startup ready', Garage.ready)
+-- A yielding map-location read must never block the interactive garage list.
+local originalList = assets.ListAssetsByHolder
+local pauseRead = true
+assets.ListAssetsByHolder = function(self, request)
+    if pauseRead then
+        pauseRead = false
+        coroutine.yield()
+    end
+    return originalList(self, request)
+end
+local locationResult
+local pendingRead = coroutine.create(function()
+    locationResult = call('locations', {})
+end)
+assert(coroutine.resume(pendingRead))
+check('garage list stays available during a map poll', call('list', { garage = 'pillboxgarage' }).ok)
+assert(coroutine.resume(pendingRead))
+check('overlapping map poll finishes independently', locationResult.ok)
+assets.ListAssetsByHolder = originalList
+
 check('parked cars have no live map location', #call('locations', {}).value.items == 0)
 check('invalid location cursor rejected', call('locations', { cursor = 'invalid' }).code == 'invalid_input')
 check('owner sees purchased vehicle', #call('list', { garage = 'pillboxgarage' }).value.items == 1)
@@ -394,7 +414,32 @@ check('other character cannot retrieve', call('retrieve', spec, 2).code == 'forb
 assetsById[assetId].status = 'held'
 check('impounded vehicle cannot retrieve', call('retrieve', spec).code == 'forbidden')
 assetsById[assetId].status = 'active'
-local spawned = call('retrieve', spec)
+local originalGet = assets.GetAsset
+local pauseMutation = true
+assets.GetAsset = function(self, request)
+    if pauseMutation then
+        pauseMutation = false
+        coroutine.yield()
+    end
+    return originalGet(self, request)
+end
+local spawned
+local pendingMutation = coroutine.create(function()
+    spawned = call('retrieve', spec)
+end)
+assert(coroutine.resume(pendingMutation))
+check(
+    'mutations stay serialized during a yielding retrieval',
+    call('keys', { assetId = assetId, action = 'lock' }).code == 'busy'
+)
+check(
+    'read cannot release an active mutation lock',
+    call('list', { garage = 'pillboxgarage' }).ok
+        and call('keys', { assetId = assetId, action = 'lock' }).code == 'busy'
+)
+assert(coroutine.resume(pendingMutation))
+assets.GetAsset = originalGet
+
 check('owner retrieves once', spawned.ok and spawnCount == 1 and rows[orderId].status == 'out')
 check('double retrieval cannot duplicate entity', call('retrieve', spec).code == 'already_out' and spawnCount == 1)
 local entity = spawned.value.netId - 100

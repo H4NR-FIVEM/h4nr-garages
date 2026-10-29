@@ -2,6 +2,18 @@
 Locales = Locales or {}
 
 Locales.ro = {
+    open_label = 'Deschide garajul',
+    store_label = 'Parchează vehiculul',
+
+    busy = 'Se finalizează altă operație la vehicul. Încearcă din nou.',
+    too_far = 'Apropie-te de garaj în sesiunea publică.',
+    not_ready = 'Garajul încă se inițializează. Încearcă din nou.',
+    menu_not_ready = 'Meniul garajului încă se încarcă. Încearcă din nou.',
+    timeout = 'Garajul nu a răspuns la timp. Încearcă din nou.',
+    character_required = 'Selectează un personaj înainte să deschizi garajul.',
+    authorization_denied = 'Garajul nu are acces la registrul vehiculelor.',
+    invalid_response = 'Garajul a primit un răspuns invalid.',
+
     retrieve = 'Scoate vehiculul',
     stored = 'Parcat',
     out = 'Scos',

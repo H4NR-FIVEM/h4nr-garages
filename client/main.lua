@@ -1,15 +1,72 @@
 local menu = exports['feather-menu-v2']
 local activeMenu, opening = nil, false
 local function Notify(key)
-    exports['feather-notify']:ShowNotification({ style = 'right', message = T(key), duration = 4000 })
+    local message = T(key)
+    if message == Locales.en_us.failed or message == (Locales[GarageConfig.DefaultLang] or {}).failed then
+        message = message .. ' (' .. tostring(key):sub(1, 64) .. ')'
+    end
+    exports['feather-notify']:ShowNotification({ style = 'right', message = message, duration = 4000 })
 end
 local function Call(name, params)
-    local result = FeatherRPC:CallAsync('h4nr-garages:' .. name, params)
+    local result, transport = FeatherRPC:CallAsync('h4nr-garages:' .. name, params)
     if type(result) ~= 'table' or not result.ok then
-        Notify(type(result) == 'table' and result.code or 'failed')
+        local failure = type(result) == 'table' and result or type(transport) == 'table' and transport or {}
+        local code = failure.code or (type(failure.error) == 'table' and failure.error.code) or 'invalid_response'
+        print(('[h4nr-garages] RPC %s refused: code=%s'):format(name, tostring(code)))
+        Notify(code)
         return nil
     end
     return result.value
+end
+local currentHint
+local function Hint(garageId, storing)
+    local key = garageId and (garageId .. (storing and ':store' or ':open'))
+    if key == currentHint then
+        return
+    end
+    currentHint = key
+    if not key then
+        exports['feather-toolkit']:ClearControlHints()
+        return
+    end
+    exports['feather-toolkit']:SetControlHints({
+        tabs = {
+            {
+                title = GarageConfig.Garages[garageId].label,
+                controls = { { key = 'E', label = T(storing and 'store_label' or 'open_label') } },
+            },
+        },
+        activeTab = 1,
+    })
+end
+local function Marker(at)
+    local spec = GarageConfig.Marker
+    DrawMarker(
+        spec.type,
+        at.x,
+        at.y,
+        at.z + 0.1,
+        0.0,
+        0.0,
+        0.0,
+        180.0,
+        0.0,
+        0.0,
+        spec.scale,
+        spec.scale,
+        spec.scale,
+        spec.color[1],
+        spec.color[2],
+        spec.color[3],
+        spec.color[4],
+        true,
+        true,
+        2,
+        false,
+        nil,
+        nil,
+        false
+    )
 end
 local function Value(result)
     if not result.ok then
@@ -30,8 +87,18 @@ local function Open(garageId, cursor)
     end
     opening = true
     local ok, problem = pcall(function()
+        local ready = menu:AwaitReady(5000)
+        if not ready.ok then
+            Notify('menu_not_ready')
+            return
+        end
         local data = Call('list', { garage = garageId, cursor = cursor })
         if not data then
+            return
+        end
+        if type(data) ~= 'table' or type(data.items) ~= 'table' then
+            print('[h4nr-garages] RPC list returned invalid item data')
+            Notify('invalid_response')
             return
         end
         Close()
@@ -171,18 +238,27 @@ CreateThread(function()
     while true do
         local pause = 500
         local ped = PlayerPedId()
+        local shownHint = false
         if not activeMenu and not opening and exports['feather-character']:HasActiveCharacter() then
             local coords, vehicle = GetEntityCoords(ped), GetVehiclePedIsIn(ped, false)
             for garageId, garage in pairs(GarageConfig.Garages) do
                 local spawn = vector3(garage.spawn.x, garage.spawn.y, garage.spawn.z)
+                local at = vehicle == 0 and garage.coords or spawn
+                if #(coords - at) <= GarageConfig.Marker.drawDistance then
+                    pause = 0
+                    Marker(at)
+                end
                 local near = #(coords - garage.coords) <= GarageConfig.Distance
                     or (vehicle ~= 0 and #(coords - spawn) <= 8.0)
-                if near then
+                local canPark = vehicle ~= 0
+                    and GetPedInVehicleSeat(vehicle, -1) == ped
+                    and Entity(vehicle).state.h4nrAssetId ~= nil
+                if near and (vehicle == 0 or canPark) and not menu:IsInputCaptured() then
                     pause = 0
-                    BeginTextCommandDisplayHelp('STRING')
-                    AddTextComponentSubstringPlayerName(T(vehicle == 0 and 'prompt' or 'store'))
-                    EndTextCommandDisplayHelp(0, false, true, -1)
-                    if IsControlJustReleased(0, 38) and not menu:IsInputCaptured() then
+                    shownHint = true
+                    Hint(garageId, vehicle ~= 0)
+                    if IsControlJustReleased(0, 38) then
+                        Hint(nil)
                         if vehicle == 0 then
                             Open(garageId)
                         else
@@ -204,6 +280,9 @@ CreateThread(function()
                 end
             end
         end
+        if not shownHint or activeMenu or opening then
+            Hint(nil)
+        end
         -- Prevent GTA's automatic engine start while the server says it is off.
         local vehicle = GetVehiclePedIsIn(ped, false)
         if
@@ -220,6 +299,7 @@ CreateThread(function()
 end)
 AddEventHandler('onClientResourceStop', function(resource)
     if resource == GetCurrentResourceName() or resource == 'feather-menu-v2' then
+        Hint(nil)
         Close()
     end
 end)
