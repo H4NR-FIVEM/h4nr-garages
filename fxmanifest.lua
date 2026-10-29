@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'iseeyoucopy'
 description 'Feather vehicle registration, public garages and owner keys'
-version '2.0.1'
+version '2.0.2'
 
 shared_scripts {
     '@ox_lib/init.lua',

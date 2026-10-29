@@ -68,3 +68,8 @@ After a restart, vehicles that still exist are re-attached by `asset_id`, and ve
 ## License
 
 GPL-3.0, see `LICENSE`.
+
+
+Model names may include hyphens (for example `f-one49d`) with Feather Assets
+0.2.2 or later. Version 2.0.2 admits these names through the purchase registration
+contract; ownership and spawning continue to use the exact original model name.

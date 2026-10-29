@@ -68,7 +68,7 @@ function Garage.Register(request)
         or request.holderType ~= 'character'
         or type(request.modelKey) ~= 'string'
         or #request.modelKey > 100
-        or not request.modelKey:match('^[A-Za-z0-9][A-Za-z0-9_]*$')
+        or not request.modelKey:match('^[A-Za-z0-9][A-Za-z0-9_%-]*$')
         or type(request.plate) ~= 'string'
         or #request.plate < 1
         or #request.plate > 8

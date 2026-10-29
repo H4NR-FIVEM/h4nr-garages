@@ -232,7 +232,7 @@ dofile(ROOT .. '/server/registration.lua')
 local request = {
     orderId = orderId,
     assetType = 'vehicle',
-    modelKey = 't20',
+    modelKey = 'f-one49d',
     holderType = 'character',
     holderId = A,
     plate = 'LS12 ABC',
