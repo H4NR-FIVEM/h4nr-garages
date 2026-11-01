@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'iseeyoucopy'
 description 'Feather vehicle registration, public garages and owner keys'
-version '2.0.3'
+version '2.1.0'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -22,6 +22,7 @@ client_scripts {
 server_scripts {
     '@feather-mysql/lib/DB.lua',
     'server/registration.lua',
+    'server/keys.lua',
     'server/main.lua',
 }
 
@@ -31,6 +32,7 @@ dependencies {
     'h4nr-feather',
     'feather-core',
     'feather-assets',
+    'feather-inventory',
     'feather-character',
     'feather-menu-v2',
     'feather-notify',

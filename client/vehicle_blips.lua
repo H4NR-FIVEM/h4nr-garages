@@ -19,7 +19,6 @@ function GarageVehicleBlips.Update(items)
         if not entry then
             local handle = AddBlipForCoord(coords.x, coords.y, coords.z)
             SetBlipSprite(handle, config.sprite)
-            SetBlipColour(handle, config.color)
             SetBlipScale(handle, config.scale)
             SetBlipAsShortRange(handle, false)
             entry = { handle = handle }
@@ -27,8 +26,17 @@ function GarageVehicleBlips.Update(items)
         else
             SetBlipCoords(entry.handle, coords.x, coords.y, coords.z)
         end
-        local title = GarageConfig.DefaultLang == 'ro' and 'Vehiculul meu' or 'My vehicle'
+        local color = item.keyHolder and config.keyHolderColor or item.lent and config.lentColor or config.color
+        if entry.color ~= color then
+            SetBlipColour(entry.handle, color)
+            entry.color = color
+        end
+        local ro = GarageConfig.DefaultLang == 'ro'
+        local title = item.keyHolder and (ro and 'Cheie' or 'Key') or (ro and 'Vehiculul meu' or 'My vehicle')
         local label = title .. (item.plate and (' · ' .. item.plate) or '')
+        if item.lent then
+            label = label .. (ro and ' (cheie dată)' or ' (key given)')
+        end
         if entry.label ~= label then
             BeginTextCommandSetBlipName('STRING')
             AddTextComponentString(label)

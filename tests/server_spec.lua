@@ -53,9 +53,19 @@ local function findRow(id)
     end
 end
 local MySQL = { query = {}, insert = {}, single = {}, update = {} }
+local keyRows = {}
 function MySQL.query.await(sql)
     if sql:find('CREATE TABLE') then
         return {}
+    end
+    if sql:find('h4nr_feather_vehicle_keys') then
+        local active = {}
+        for _, row in pairs(keyRows) do
+            if row.status == 'active' then
+                active[#active + 1] = copy(row)
+            end
+        end
+        return active
     end
     local result = {}
     for _, row in pairs(rows) do
@@ -66,6 +76,9 @@ function MySQL.query.await(sql)
     return result
 end
 function MySQL.single.await(sql, p)
+    if sql:find('h4nr_feather_vehicle_keys') then
+        return copy(keyRows[p[1]])
+    end
     return copy(sql:find('WHERE order_id') and rows[p[1]] or findRow(p[1]))
 end
 function MySQL.insert.await(_, p)
@@ -84,7 +97,21 @@ function MySQL.insert.await(_, p)
     return 1
 end
 function MySQL.update.await(sql, p)
-    if sql:find('SET asset_id') then
+    if sql:find('INSERT INTO h4nr_feather_vehicle_keys') then
+        local row = keyRows[p[1]] or { asset_id = p[1], generation = 0 }
+        row.generation, row.key_instance_id, row.owner_id, row.issued_to, row.status =
+            row.generation + 1, nil, p[2], p[3], 'void'
+        keyRows[p[1]] = row
+        return 1
+    elseif sql:find('h4nr_feather_vehicle_keys SET key_instance_id') then
+        keyRows[p[2]].key_instance_id, keyRows[p[2]].status = p[1], 'active'
+        return 1
+    elseif sql:find('h4nr_feather_vehicle_keys SET status') then
+        if keyRows[p[1]] then
+            keyRows[p[1]].status = 'void'
+        end
+        return 1
+    elseif sql:find('SET asset_id') then
         if failSaveAsset then
             failSaveAsset = false
             error('injected SQL failure after Asset commit')
@@ -199,6 +226,95 @@ function assets:ListAssetsByHolder(p)
     end
     return { ok = true, value = { items = items } }
 end
+-- Modelled Inventory contract: unique instances in inventories, guards and destruction.
+local characterInventories = { [A] = 1, [B] = 2 }
+local TRUNK = 3
+local instances, nextInstance, inventoryFull, failGrant, failDestroy = {}, 100, false, false, false
+local destroyGuards, itemMovedHandlers = {}, {}
+local grantIds = {}
+local inventoryApi = {
+    Guards = {
+        RegisterDestroyGuard = function(name, fn)
+            destroyGuards[name] = fn
+            return { ok = true, value = true }
+        end,
+        UnregisterDestroyGuard = function(name)
+            destroyGuards[name] = nil
+        end,
+    },
+    Instances = {
+        GetInstance = function(id)
+            local item = instances[id]
+            return item and { ok = true, value = { id = id, inventoryId = item.inventoryId, metadata = item.metadata } }
+                or { ok = false, error = { code = 'NOT_FOUND' } }
+        end,
+        GetItemForCharacter = function(character, id)
+            local item = instances[id]
+            if item and item.inventoryId == characterInventories[character] then
+                return { ok = true, value = { id = id } }
+            end
+            return { ok = false, error = { code = 'NOT_FOUND' } }
+        end,
+    },
+    Inventory = {
+        GetContainerLifecycle = function(id)
+            return { ok = true, value = { location = id == TRUNK and 'trunk' or 'character' } }
+        end,
+        InventoryCanHoldById = function()
+            return { ok = true, value = { accepted = not inventoryFull } }
+        end,
+        GetInventoryItems = function(id)
+            local rows = {}
+            for instanceId, item in pairs(instances) do
+                if item.inventoryId == id then
+                    rows[#rows + 1] = { id = instanceId, name = 'vehicle_key' }
+                end
+            end
+            return { ok = true, value = rows }
+        end,
+    },
+    Items = {
+        GetDefinitions = function()
+            return { ok = true, value = { { id = 77, name = 'vehicle_key', instance_mode = 'unique' } } }
+        end,
+    },
+    DestroyInstances = function(context, spec)
+        assert(spec.expectedLocation == (spec.inventoryId == TRUNK and 'trunk' or 'character'))
+        if failDestroy then
+            return { ok = false, error = { code = 'internal' } }
+        end
+        for _, id in ipairs(spec.instanceIds) do
+            for _, guard in pairs(destroyGuards) do
+                if guard({ id = id }, context) ~= true then
+                    return { ok = false, error = { code = 'denied' } }
+                end
+            end
+            instances[id] = nil
+        end
+        return { ok = true, value = spec.instanceIds }
+    end,
+}
+local inventory = {}
+function inventory:initiate()
+    return inventoryApi
+end
+function inventory:AwaitReady()
+    return { ok = true }
+end
+function inventory:GetCharacterInventory(character)
+    return { ok = true, value = { id = characterInventories[character] } }
+end
+function inventory:GrantCharacterUniqueItemOnce(request)
+    assert(request.definitionId == 77 and request.itemName == 'vehicle_key')
+    assert(not grantIds[request.grantId], 'a new key always has a new grant ID')
+    if failGrant then
+        return { ok = false, error = { code = 'internal' } }
+    end
+    grantIds[request.grantId] = true
+    nextInstance = nextInstance + 1
+    instances[nextInstance] = { inventoryId = characterInventories[request.characterId], metadata = request.metadata }
+    return { ok = true, value = { instanceId = nextInstance } }
+end
 local core = {
     GetSessionContext = function(_, source)
         return { ok = true, value = { characterId = source == 1 and A or B } }
@@ -206,7 +322,7 @@ local core = {
 }
 exports = setmetatable({}, {
     __index = function(_, name)
-        return ({ ['feather-assets'] = assets, ['feather-core'] = core })[name]
+        return ({ ['feather-assets'] = assets, ['feather-core'] = core, ['feather-inventory'] = inventory })[name]
     end,
     __call = function(_, name, fn)
         api[name] = fn
@@ -222,6 +338,10 @@ function CreateThread(fn)
     threads[#threads + 1] = fn
 end
 function Wait() end
+local eventHandlers = {}
+function AddEventHandler(name, fn)
+    eventHandlers[name] = fn
+end
 FeatherRPC = {
     Register = function(_, name, fn)
         rpc[name] = fn
@@ -229,6 +349,7 @@ FeatherRPC = {
 }
 dofile(ROOT .. '/config/shared.lua')
 dofile(ROOT .. '/server/registration.lua')
+dofile(ROOT .. '/server/keys.lua')
 local request = {
     orderId = orderId,
     assetType = 'vehicle',
@@ -287,7 +408,9 @@ check('SQL failure after identifier returns retryable failure', not api.Register
 check('retry after identifier commit succeeds', api.RegisterPurchasedVehicle(request).ok and assigned == 1)
 check(
     'capability advertises actual readiness',
-    api.GetCapabilities().value.purchaseRegistration == 1 and api.GetCapabilities().value.ready
+    api.GetCapabilities().value.purchaseRegistration == 1
+        and api.GetCapabilities().value.keyItems == 1
+        and api.GetCapabilities().value.ready
 )
 -- Runtime/native boundary -----------------------------------------------------
 local coords = { [1] = GarageConfig.Garages.pillboxgarage.coords, [2] = GarageConfig.Garages.pillboxgarage.coords }
@@ -489,4 +612,131 @@ caller = 'petrolist_job'
 local workVehicle = api.GetWorkVehicle({assetId=assetId})
 check('work vehicle export resolves the server live registry', workVehicle.ok and type(workVehicle.value.netId)=='number')
 check('work vehicle export validates persistent identity', api.GetWorkVehicle({assetId='not-a-uuid'}).code == 'forbidden')
+caller = 'h4nr-vehicleshop'
+-- Physical keys ---------------------------------------------------------------
+local function activeKey()
+    return keyRows[assetId].status == 'active' and tonumber(keyRows[assetId].key_instance_id) or nil
+end
+local function give(id, inventoryId)
+    local from = instances[id].inventoryId
+    instances[id].inventoryId = inventoryId
+    eventHandlers['Feather:Inventory:ItemMoved']({ instanceId = id, fromInventoryId = from, toInventoryId = inventoryId })
+end
+local keyId = activeKey()
+local vehicleNow = next(entities)
+check('retrieval puts one key in the inventory', keyId and instances[keyId].inventoryId == 1)
+check('the key carries asset, plate and generation', instances[keyId].metadata.assetId == assetId
+    and instances[keyId].metadata.plate == 'LS99 XYZ' and instances[keyId].metadata.generation == keyRows[assetId].generation)
+check('the key is labelled with the plate', instances[keyId].metadata.label == 'Cheie · LS99 XYZ')
+coords[1], coords[2] = coords[vehicleNow], coords[vehicleNow]
+drivers[vehicleNow] = 1
+check('holder owner may lock and start', call('keys', { assetId = assetId, action = 'lock' }).ok)
+check('no key, no access for a stranger', call('keys', { assetId = assetId, action = 'lock' }, 2).code == 'forbidden')
+Entity(vehicleNow).state:set('h4nrGarageEngine', true, true)
+give(keyId, 2)
+check('giving the key stops a running engine', Entity(vehicleNow).state.h4nrGarageEngine == false)
+check('owner without the key is refused', call('keys', { assetId = assetId, action = 'lock' }).code == 'key_not_here')
+check('new holder can lock', call('keys', { assetId = assetId, action = 'lock' }, 2).ok)
+drivers[vehicleNow] = 1
+check('owner in the seat cannot start without the key',
+    call('keys', { assetId = assetId, action = 'engine' }).code == 'key_not_here')
+drivers[vehicleNow] = 2
+check('new holder can start', call('keys', { assetId = assetId, action = 'engine' }, 2).value.running)
+local ownerBlip = call('locations', {}).value.items[1]
+check('owner blip shows the key was given', ownerBlip.lent == true and not ownerBlip.keyHolder)
+local holderBlip = call('locations', {}, 2).value.items[1]
+check('holder sees the car through the key', holderBlip.keyHolder and holderBlip.assetId == assetId
+    and holderBlip.plate == 'LS99 XYZ')
+check('later location pages do not repeat held keys',
+    #call('locations', { cursor = '55555555-5555-5555-5555-555555555555' }, 2).value.items == 0)
+give(keyId, TRUNK)
+check('key in a trunk does not work for the owner', call('keys', { assetId = assetId, action = 'lock' }).code == 'key_not_here')
+check('key in a trunk does not work for the former holder', call('keys', { assetId = assetId, action = 'lock' }, 2).code == 'forbidden')
+check('key in a trunk counts as given', call('locations', {}).value.items[1].lent == true)
+check('key in a trunk gives nobody a holder blip', #call('locations', {}, 2).value.items == 0)
+give(keyId, 1)
+check('getting the key back restores use', call('keys', { assetId = assetId, action = 'lock' }).ok)
+check('getting the key back restores the blip', not call('locations', {}).value.items[1].lent)
+local guard = destroyGuards['h4nr-garages:vehicle-key']
+check('players cannot destroy an active key', guard({ id = keyId }, { actorSource = 1 }) == false)
+check('server cleanup may destroy an active key', guard({ id = keyId }, { resource = 'feather-inventory' }) == true)
+check('unrelated items are not guarded', guard({ id = 1 }, { actorSource = 1 }) == true)
+give(keyId, 2)
+drivers[vehicleNow] = 1
+local storeSpec = { garage = 'pillboxgarage', assetId = assetId,
+    props = { engineHealth = 900, bodyHealth = 800, fuelLevel = 55, color1 = 27, color2 = 0 } }
+coords[1], coords[2] = GarageConfig.Garages.pillboxgarage.coords, GarageConfig.Garages.pillboxgarage.coords
+coords[vehicleNow] = coords[1]
+check('owner without the key cannot park', call('store', storeSpec).code == 'key_not_here')
+drivers[vehicleNow] = 2
+check('another player with the key can park', call('store', storeSpec, 2).ok and rows[orderId].status == 'stored')
+check('parking takes the key wherever it is', not instances[keyId] and keyRows[assetId].status == 'void')
+check('the car stays with its owner', assetsById[assetId].owner.holderId == A)
+check('a voided key has no guard', guard({ id = keyId }, { actorSource = 1 }) == true)
+-- Refusals leave no car without a key and no key without a car.
+local generation = keyRows[assetId].generation
+inventoryFull = true
+local spawnsBefore = spawnCount
+check('full inventory refuses retrieval', call('retrieve', spec).code == 'inventory_full')
+check('full inventory spawns nothing', spawnCount == spawnsBefore and rows[orderId].status == 'stored')
+check('full inventory spends no generation', keyRows[assetId].generation == generation)
+inventoryFull = false
+failGrant = true
+check('failed grant refuses retrieval', call('retrieve', spec).code == 'key_unavailable')
+check('failed grant spawns nothing', spawnCount == spawnsBefore and rows[orderId].status == 'stored')
+failGrant = false
+local originalSpawn = FeatherVehicles.spawnVehicle
+FeatherVehicles.spawnVehicle = function()
+    return nil
+end
+check('failed spawn refuses retrieval', call('retrieve', spec).code == 'spawn_failed')
+check('failed spawn takes the key back', not activeKey() and next(instances) == nil)
+FeatherVehicles.spawnVehicle = originalSpawn
+-- A car that vanished: the next retrieval replaces its key.
+check('retrieval after failures works', call('retrieve', spec).ok)
+local firstKey = activeKey()
+entities[next(entities)] = nil
+check('vanished car can be retrieved again', call('retrieve', spec).ok)
+local secondKey = activeKey()
+check('the old key of a vanished car is gone', firstKey ~= secondKey and not instances[firstKey] and instances[secondKey])
+-- A voided key that cannot be destroyed stays useless.
+local carNow = next(entities)
+coords[1], coords[2] = coords[carNow], coords[carNow]
+GarageKeys.Issue(assetsById[assetId], A)
+local spare = activeKey()
+failDestroy = true
+GarageKeys.Issue(assetsById[assetId], A)
+failDestroy = false
+check('an undestroyed old key stays in the inventory', instances[spare] ~= nil)
+check('an undestroyed old key is no longer the active one', activeKey() ~= spare)
+instances[activeKey()].inventoryId = 2
+check('an undestroyed old key does not open the car', call('keys', { assetId = assetId, action = 'lock' }).code == 'key_not_here')
+instances[activeKey()].inventoryId = 1
+-- A key from a former owner never counts; the current owner keeps access.
+assetsById[assetId].owner.holderId = B
+check('former owner with an old key is refused', call('keys', { assetId = assetId, action = 'lock' }).code == 'forbidden')
+check('new owner has access without the old key', call('keys', { assetId = assetId, action = 'lock' }, 2).ok)
+assetsById[assetId].owner.holderId = A
+-- Vehicles taken out before keys existed stay usable by their owner only.
+GarageKeys.Void(assetId)
+check('owner uses a car with no key record', call('keys', { assetId = assetId, action = 'lock' }).ok)
+check('stranger cannot use a car with no key record', call('keys', { assetId = assetId, action = 'lock' }, 2).code == 'forbidden')
+-- Restart: a surviving car keeps its key, a vanished one loses it.
+GarageKeys.Issue(assetsById[assetId], A)
+local survivor = activeKey()
+for _, fn in ipairs(threads) do
+    fn()
+end
+check('restart keeps the key of a surviving car', activeKey() == survivor and instances[survivor])
+check('restart keeps the key rule', call('keys', { assetId = assetId, action = 'lock' }, 2).code == 'forbidden')
+entities[next(entities)] = nil
+for _, fn in ipairs(threads) do
+    fn()
+end
+check('restart voids the key of a vanished car', not activeKey() and not instances[survivor])
+check('restart returns the vanished car to the garage', rows[orderId].status == 'stored')
+destroyGuards['h4nr-garages:vehicle-key'] = nil
+eventHandlers.onResourceStart('feather-inventory')
+threads[#threads]()
+check('inventory restart restores the guard', destroyGuards['h4nr-garages:vehicle-key'] ~= nil)
 print(('server_spec: %d checks passed'):format(passed))

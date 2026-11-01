@@ -104,6 +104,9 @@ local providers = {
     },
 }
 exports = setmetatable({}, {
+    __call = function(_, name, fn)
+        api[name] = fn
+    end,
     __index = function(_, name)
         if name == 'feather-menu-v2' then
             return setmetatable({}, {

@@ -37,6 +37,28 @@ local function Owns(source, assetId)
     local check = assets:CheckInterest({ assetId = assetId, holderType = 'character', holderId = character })
     return check.ok and check.value.matched and check.value.assetStatus == 'active'
 end
+-- Using a vehicle follows the key, not ownership. See server/keys.lua.
+local function CanOperate(source, assetId)
+    local character = Character(source)
+    if not character or not Garage.Uuid(assetId) then
+        return false, 'forbidden'
+    end
+    local read = assets:GetAsset({ assetId = assetId })
+    local owner = read.ok and read.value.status == 'active' and read.value.owner
+    if not owner or owner.holderType ~= 'character' then
+        return false, 'forbidden'
+    end
+    if GarageKeys.Allows(character, assetId, owner.holderId) then
+        return true
+    end
+    return false, character == owner.holderId and 'key_not_here' or 'forbidden'
+end
+function GarageKeys.OnKeyMoved(assetId)
+    local vehicle = Vehicle(assetId)
+    if vehicle then
+        Entity(vehicle).state:set('h4nrGarageEngine', false, true)
+    end
+end
 local function AtGarage(source, garageId)
     local garage = GarageConfig.Garages[garageId]
     if not garage or GetPlayerRoutingBucket(source) ~= 0 then
@@ -127,6 +149,7 @@ local function Locations(source, params)
         return result
     end
     local entities, items = {}, {}
+    local held = GarageKeys.Held(character)
     local bucket = GetPlayerRoutingBucket(source)
     for _, vehicle in ipairs(GetAllVehicles()) do
         local assetId = Entity(vehicle).state.h4nrAssetId
@@ -147,7 +170,26 @@ local function Locations(source, params)
                 assetId = asset.assetId,
                 plate = asset.identifiers and asset.identifiers.plate,
                 coords = { x = at.x, y = at.y, z = at.z },
+                lent = GarageKeys.IsLent(asset.assetId, character, held),
             }
+        end
+    end
+    -- Cars of other owners whose current key this character carries, once per refresh.
+    if not params.cursor then
+        for assetId in pairs(held or {}) do
+            local vehicle = entities[assetId]
+            local read = vehicle and DoesEntityExist(vehicle) and assets:GetAsset({ assetId = assetId })
+            local asset = read and read.ok and read.value
+            local owner = asset and asset.status == 'active' and asset.owner
+            if owner and owner.holderId ~= character and GarageKeys.IsCurrent(assetId, owner.holderId) then
+                local at = GetEntityCoords(vehicle)
+                items[#items + 1] = {
+                    assetId = assetId,
+                    plate = asset.identifiers and asset.identifiers.plate,
+                    coords = { x = at.x, y = at.y, z = at.z },
+                    keyHolder = true,
+                }
+            end
         end
     end
     if Character(source) ~= character then
@@ -203,6 +245,14 @@ local function Retrieve(source, params)
         if changed ~= 1 then
             return Garage.Err('busy')
         end
+        local issued = GarageKeys.Issue(asset, Character(source))
+        if not issued.ok then
+            DB.exec(
+                "UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status = 'spawning'",
+                params.assetId
+            )
+            return issued
+        end
         local props = json.decode(row.props_json)
         props.plate, props.model = asset.identifiers.plate, joaat(asset.modelKey)
         props.fuelLevel = props.fuelLevel or 100.0
@@ -214,6 +264,7 @@ local function Retrieve(source, params)
             bucket = 0,
         })
         if not ok or not netId then
+            GarageKeys.Void(params.assetId)
             DB.exec(
                 "UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status = 'spawning'",
                 params.assetId
@@ -236,8 +287,12 @@ local function Retrieve(source, params)
 end
 local function Store(source, params)
     local garage = AtGarage(source, params.garage)
-    if not garage or not Owns(source, params.assetId) then
+    if not garage then
         return Garage.Err('forbidden')
+    end
+    local allowed, refusal = CanOperate(source, params.assetId)
+    if not allowed then
+        return Garage.Err(refusal)
     end
     return Garage.Lock(params.assetId, function()
         local vehicle = Vehicle(params.assetId)
@@ -290,13 +345,15 @@ local function Store(source, params)
             return Garage.Err('unavailable')
         end
         live[params.assetId] = nil
+        GarageKeys.Void(params.assetId)
         DB.exec("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ?", params.assetId)
         return Garage.Ok(true)
     end)
 end
 local function Keys(source, params)
-    if not Owns(source, params.assetId) then
-        return Garage.Err('forbidden')
+    local allowed, refusal = CanOperate(source, params.assetId)
+    if not allowed then
+        return Garage.Err(refusal)
     end
     local vehicle = Vehicle(params.assetId)
     if
@@ -351,8 +408,12 @@ end
 CreateThread(function()
     local ok, problem = pcall(function()
         Garage.Migrate()
+        GarageKeys.Migrate()
         local ready = assets:AwaitReady(30000)
         assert(ready.ok, ready.code)
+        local inventoryReady = exports['feather-inventory']:AwaitReady(30000)
+        assert(inventoryReady.ok, inventoryReady.code)
+        GarageKeys.Start()
         local rows = DB.query("SELECT asset_id FROM h4nr_feather_vehicles WHERE status IN ('spawning','storing','out')")
             or {}
         for _, row in ipairs(rows) do
@@ -361,6 +422,11 @@ CreateThread(function()
                 Vehicle(row.asset_id) and 'out' or 'stored',
                 row.asset_id
             )
+        end
+        for _, assetId in ipairs(GarageKeys.ActiveAssets()) do
+            if not Vehicle(assetId) then
+                GarageKeys.Void(assetId)
+            end
         end
         Garage.ready = true
     end)

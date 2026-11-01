@@ -4,7 +4,7 @@ local function check(name, condition)
     passed = passed + 1
 end
 GarageConfig =
-    { DefaultLang = 'ro', VehicleBlip = { enabled = true, refreshMs = 5000, sprite = 225, color = 3, scale = 0.75 } }
+    { DefaultLang = 'ro', VehicleBlip = { enabled = true, refreshMs = 5000, sprite = 225, color = 3, lentColor = 47, keyHolderColor = 5, scale = 0.75 } }
 local activeCharacter, handles, nextHandle, removed, threads, events = true, {}, 0, {}, {}, {}
 function CreateThread(fn)
     threads[#threads + 1] = fn
@@ -101,4 +101,18 @@ GarageConfig.VehicleBlip.enabled = false
 local before = #calls
 GarageVehicleBlips.Refresh()
 check('disabled tracker makes no server calls', #calls == before)
+GarageConfig.VehicleBlip.enabled = true
+GarageVehicleBlips.Clear()
+local lent = item('car', 1)
+lent.lent = true
+GarageVehicleBlips.Update({ lent })
+local handle = handles[nextHandle]
+check('owner blip changes when the key is given', handle.color == 47 and handle.label == 'Vehiculul meu · LS12 ABC (cheie dată)')
+GarageVehicleBlips.Update({ item('car', 1) })
+check('owner blip returns when the key comes back', handle.color == 3 and handle.label == 'Vehiculul meu · LS12 ABC')
+local held = item('other', 1)
+held.keyHolder = true
+GarageVehicleBlips.Update({ held })
+handle = handles[nextHandle]
+check('holder gets a key blip', handle.color == 5 and handle.label == 'Cheie · LS12 ABC')
 print(('blips_spec: %d checks passed'):format(passed))

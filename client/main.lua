@@ -212,6 +212,15 @@ local function Key(action)
         Notify(result.locked and 'locked' or 'unlocked')
     end
 end
+-- For panels: the same operation as the engine key, so the key rule applies everywhere.
+exports('ToggleEngine', function(vehicle)
+    local assetId = Entity(vehicle).state.h4nrAssetId
+    local result = assetId and Call('keys', { assetId = assetId, action = 'engine' })
+    if not result then
+        return nil
+    end
+    return result.running
+end)
 RegisterCommand('feathervehiclelock', function()
     CreateThread(function()
         Key('lock')
