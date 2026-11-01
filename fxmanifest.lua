@@ -24,6 +24,7 @@ server_scripts {
     'server/registration.lua',
     'server/keys.lua',
     'server/payments.lua',
+    'server/sale.lua',
     'server/main.lua',
 }
 

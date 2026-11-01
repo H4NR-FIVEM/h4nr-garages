@@ -41,10 +41,17 @@ function Garage.Migrate()
             props_json MEDIUMTEXT NOT NULL,
             plate VARCHAR(8) NOT NULL,
             garage VARCHAR(64) NOT NULL,
-            status ENUM('registering','stored','spawning','out','storing') NOT NULL DEFAULT 'registering',
+            status ENUM('registering','stored','spawning','out','storing','sale_reserved') NOT NULL DEFAULT 'registering',
+            sale_id CHAR(36) NULL,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ]])
+    DB.exec([[
+        ALTER TABLE h4nr_feather_vehicles
+        MODIFY COLUMN status ENUM('registering','stored','spawning','out','storing','sale_reserved')
+        NOT NULL DEFAULT 'registering'
+    ]])
+    DB.exec('ALTER TABLE h4nr_feather_vehicles ADD COLUMN IF NOT EXISTS sale_id CHAR(36) NULL')
 end
 local function OwnedPurchase(asset, row)
     return asset.managerResource == 'h4nr-garages'
@@ -203,5 +210,5 @@ exports('RegisterPurchasedVehicle', function(request)
 end)
 exports('GetCapabilities', function()
     local health = exports['feather-assets']:AwaitReady(0)
-    return Garage.Ok({ ready = Garage.ready and health.ok == true, purchaseRegistration = 1, keyItems = 1 })
+    return Garage.Ok({ ready = Garage.ready and health.ok == true, purchaseRegistration = 1, keyItems = 1, vehicleSale = 1 })
 end)

@@ -117,6 +117,24 @@ function MySQL.update.await(sql, p)
     elseif sql:find('SET rekey_requested_at = NULL') then
         keyRows[p[1]].rekey_requested_at = nil
         return 1
+    elseif sql:find("SET status = 'sale_reserved'") then
+        local row = assert(findRow(p[2]))
+        if row.status ~= 'stored' then
+            return 0
+        end
+        row.status, row.sale_id = 'sale_reserved', p[1]
+        return 1
+    elseif sql:find("AND status = 'sale_reserved' AND sale_id") then
+        local row = assert(findRow(p[1]))
+        if row.status ~= 'sale_reserved' or row.sale_id ~= p[2] then
+            return 0
+        end
+        row.status, row.sale_id = 'stored', nil
+        return 1
+    elseif sql:find("SET status = 'stored', sale_id = NULL") then
+        local row = assert(findRow(p[1]))
+        row.status, row.sale_id = 'stored', nil
+        return 1
     elseif sql:find('SET asset_id') then
         if failSaveAsset then
             failSaveAsset = false
@@ -161,7 +179,7 @@ DB = {
         return MySQL.insert.await(sql, { ... })
     end,
     exec = function(sql, ...)
-        if sql:find('CREATE TABLE') then
+        if sql:find('CREATE TABLE') or sql:find('ALTER TABLE') then
             return 0
         end
         return MySQL.update.await(sql, { ... })
@@ -212,6 +230,27 @@ function assets:AssignAssetIdentifier(p)
     claims[p.value], asset.identifiers.plate, asset.revision = p.assetId, p.value, asset.revision + 1
     if failAssignResponse then
         failAssignResponse = false
+        return { ok = false, code = 'transaction_failed' }
+    end
+    return { ok = true, value = copy(asset) }
+end
+local transferCalls, failTransfer, loseTransferReply = {}, false, false
+function assets:TransferOwnership(p)
+    assert(domainEnv.Assets.Token(p.requestId, 128), 'real Assets transfer request ID validator')
+    transferCalls[#transferCalls + 1] = p
+    if failTransfer then
+        return { ok = false, code = 'asset_unavailable' }
+    end
+    local asset = assert(assetsById[p.assetId])
+    if p.expectedRevision ~= asset.revision then
+        return { ok = false, code = 'revision_conflict' }
+    end
+    if asset.owner.holderId ~= p.fromHolderId then
+        return { ok = false, code = 'holder_mismatch' }
+    end
+    asset.owner.holderId, asset.revision = p.toHolderId, asset.revision + 1
+    if loseTransferReply then
+        loseTransferReply = false
         return { ok = false, code = 'transaction_failed' }
     end
     return { ok = true, value = copy(asset) }
@@ -378,6 +417,7 @@ dofile(ROOT .. '/config/shared.lua')
 dofile(ROOT .. '/server/registration.lua')
 dofile(ROOT .. '/server/keys.lua')
 dofile(ROOT .. '/server/payments.lua')
+dofile(ROOT .. '/server/sale.lua')
 local request = {
     orderId = orderId,
     assetType = 'vehicle',
@@ -825,6 +865,59 @@ check('recovery destroys the key wherever it is', not instances[lostKey] and not
 check('recovery returns the car to the garage', rows[orderId].status == 'stored' and not entities[recoverCar])
 check('the next retrieval issues a new key', call('retrieve', spec).ok and activeKey() ~= lostKey and instances[activeKey()].inventoryId == 1)
 os.time = realTime
+-- Sale reservation and transfer ------------------------------------------------
+local saleId = '66666666-6666-6666-6666-666666666666'
+local otherSale = '77777777-7777-7777-7777-777777777777'
+local sale = { saleId = saleId, assetId = assetId, sellerId = A }
+local sold = { saleId = saleId, assetId = assetId, sellerId = A, buyerId = B }
+caller = 'evil'
+check('untrusted resources cannot reserve', api.ReserveForSale(sale).code == 'forbidden')
+check('untrusted resources cannot transfer', api.TransferReservedVehicle(sold).code == 'forbidden')
+check('untrusted resources cannot list', api.ListParkedVehicles({ holderId = A }).code == 'forbidden')
+caller = 'h4nr-vehicleshop'
+check('capability advertises sale support', api.GetCapabilities().value.vehicleSale == 1)
+check('a car that is out cannot be reserved', rows[orderId].status == 'out' and api.ReserveForSale(sale).code == 'vehicle_not_parked')
+check('a car that is out is not listed for sale', #api.ListParkedVehicles({ holderId = A }).value.items == 0)
+local parkedCar = next(entities)
+coords[1], coords[parkedCar] = GarageConfig.Garages.pillboxgarage.coords, GarageConfig.Garages.pillboxgarage.coords
+drivers[parkedCar] = 1
+assert(call('store', storeSpec).ok)
+local listed = api.ListParkedVehicles({ holderId = A }).value.items[1]
+check('a parked car is listed with what the buyer sees', listed.assetId == assetId and listed.plate == 'LS99 XYZ' and listed.garage == 'pillboxgarage')
+check('only the owner can reserve', api.ReserveForSale({ saleId = saleId, assetId = assetId, sellerId = B }).code == 'forbidden')
+check('the owner can reserve', api.ReserveForSale(sale).ok and rows[orderId].status == 'sale_reserved')
+check('reserving again for the same sale is safe', api.ReserveForSale(sale).ok)
+check('a second sale cannot reserve', api.ReserveForSale({ saleId = otherSale, assetId = assetId, sellerId = A }).code == 'vehicle_not_parked')
+check('a reserved car cannot be taken out', call('retrieve', spec).code == 'busy' and rows[orderId].status == 'sale_reserved')
+check('a reserved car is not listed for sale', #api.ListParkedVehicles({ holderId = A }).value.items == 0)
+for _, fn in ipairs(threads) do
+    fn()
+end
+check('a reservation survives a restart', rows[orderId].status == 'sale_reserved' and rows[orderId].sale_id == saleId)
+check('another sale cannot release it', api.ReleaseSaleReservation({ saleId = otherSale, assetId = assetId }).ok and rows[orderId].status == 'sale_reserved')
+check('the sale can release it', api.ReleaseSaleReservation({ saleId = saleId, assetId = assetId }).ok and rows[orderId].status == 'stored')
+check('releasing twice is safe', api.ReleaseSaleReservation({ saleId = saleId, assetId = assetId }).ok)
+check('no transfer without a reservation', api.TransferReservedVehicle(sold).code == 'reservation_lost' and assetsById[assetId].owner.holderId == A)
+assert(api.ReserveForSale(sale).ok)
+failTransfer = true
+check('a refused transfer keeps the reservation', api.TransferReservedVehicle(sold).code == 'asset_unavailable' and rows[orderId].status == 'sale_reserved')
+failTransfer = false
+loseTransferReply = true
+check('a lost reply looks like a failure', not api.TransferReservedVehicle(sold).ok)
+check('the retry finishes without moving it twice', (function()
+    local before = assetsById[assetId].revision
+    local retried = api.TransferReservedVehicle(sold)
+    return retried.ok and retried.value.garage == 'pillboxgarage' and assetsById[assetId].revision == before
+end)())
+check('the buyer owns the car', assetsById[assetId].owner.holderId == B)
+check('the car waits in the same garage', rows[orderId].status == 'stored' and rows[orderId].sale_id == nil and rows[orderId].garage == 'pillboxgarage')
+check('the transfer names both holders', transferCalls[#transferCalls].fromHolderId == A and transferCalls[#transferCalls].toHolderId == B)
+check('repeating a finished transfer is safe', api.TransferReservedVehicle(sold).ok)
+check('the buyer sees the car', #call('list', { garage = 'pillboxgarage' }, 2).value.items == 1)
+check('the seller no longer sees the car', #call('list', { garage = 'pillboxgarage' }).value.items == 0)
+check('the seller cannot take it out', call('retrieve', spec).code == 'forbidden')
+coords[2] = GarageConfig.Garages.pillboxgarage.coords
+check('the buyer can take it out with a key', call('retrieve', spec, 2).ok and instances[activeKey()].inventoryId == 2)
 destroyGuards['h4nr-garages:vehicle-key'] = nil
 eventHandlers.onResourceStart('feather-inventory')
 threads[#threads]()

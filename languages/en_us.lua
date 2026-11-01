@@ -17,6 +17,7 @@ Locales.en_us = {
     retrieve = 'Retrieve vehicle',
     stored = 'Stored',
     out = 'Out',
+    sale_reserved = 'Reserved for sale',
     unavailable = 'Vehicle unavailable here',
     failed = 'Operation failed. Try again.',
     forbidden = 'You do not have access to this vehicle.',

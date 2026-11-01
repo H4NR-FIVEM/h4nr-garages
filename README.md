@@ -66,7 +66,22 @@ exports['h4nr-garages']:RegisterPurchasedVehicle({
 - Changing the buyer, model, colours or garage of an existing order is refused.
 - Registration in the background works with the character offline.
 
-`GetCapabilities()` returns `{ ok = true, value = { ready, purchaseRegistration = 1, keyItems = 1 } }`.
+Sale support, for the same trusted shops. The shop owns the offer and the money; the garage owns the vehicle and is the only resource that changes its owner:
+
+```lua
+exports['h4nr-garages']:ListParkedVehicles({ holderId = '<uuid>' })
+-- { ok = true, value = { items = { { assetId, assetType, model, plate, garage } } } }
+exports['h4nr-garages']:ReserveForSale({ saleId = '<uuid>', assetId = '<uuid>', sellerId = '<uuid>' })
+exports['h4nr-garages']:ReleaseSaleReservation({ saleId = '<uuid>', assetId = '<uuid>' })
+exports['h4nr-garages']:TransferReservedVehicle({ saleId = '<uuid>', assetId = '<uuid>', sellerId = '<uuid>', buyerId = '<uuid>' })
+-- { ok = true, value = { garage } } | { ok = false, code }
+```
+
+- Only a parked vehicle can be reserved. A reserved vehicle (`sale_reserved`) cannot be taken out, and the reservation survives a restart.
+- All three calls can be repeated safely. A transfer whose reply was lost finds the buyer already holding the vehicle. `reservation_lost` means the sale no longer holds it.
+- The vehicle stays in the same garage with its properties, damage and fuel.
+
+`GetCapabilities()` returns `{ ok = true, value = { ready, purchaseRegistration = 1, keyItems = 1, vehicleSale = 1 } }`.
 
 ## Tests
 
@@ -74,7 +89,7 @@ exports['h4nr-garages']:RegisterPurchasedVehicle({
 python3 tests/run.py
 ```
 
-160 checks: 125 server checks (including the real Feather Assets validators), 13 for blips and 22 client checks on the real Menu v2, with SQL, Inventory and natives simulated. The syntax of every Lua file is checked too.
+189 checks: 154 server checks (including the real Feather Assets validators), 13 for blips and 22 client checks on the real Menu v2, with SQL, Inventory and natives simulated. The syntax of every Lua file is checked too.
 
 Still check in game: buying with cash and bank, retrying after an error, taking out and parking, colours, mods, fuel, the U and G keys, giving a key to another player and getting it back, a key in a trunk and on the ground, a full inventory, the F3 engine button, a key recovery with the wait and payment, blips near and far and their removal on parking, reconnecting and restarting with a vehicle out, all three vehicle types, and a second character being refused.
 

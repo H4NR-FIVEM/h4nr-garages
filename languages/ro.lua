@@ -17,6 +17,7 @@ Locales.ro = {
     retrieve = 'Scoate vehiculul',
     stored = 'Parcat',
     out = 'Scos',
+    sale_reserved = 'Rezervat pentru vânzare',
     unavailable = 'Vehicul indisponibil aici',
     failed = 'Operația nu a reușit. Încearcă din nou.',
     forbidden = 'Nu ai acces la acest vehicul.',
