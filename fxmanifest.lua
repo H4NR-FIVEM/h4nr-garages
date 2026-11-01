@@ -23,6 +23,7 @@ server_scripts {
     '@feather-mysql/lib/DB.lua',
     'server/registration.lua',
     'server/keys.lua',
+    'server/payments.lua',
     'server/main.lua',
 }
 
@@ -33,6 +34,7 @@ dependencies {
     'feather-core',
     'feather-assets',
     'feather-inventory',
+    'feather-economy',
     'feather-character',
     'feather-menu-v2',
     'feather-notify',

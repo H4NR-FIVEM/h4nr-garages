@@ -5,7 +5,7 @@ Public garages for cars, boats and aircraft on the Feather Framework for FiveM. 
 ## Requirements
 
 - `feather-mysql`, `ox_lib`
-- Feather Core, Character, Assets, Inventory, Admin, Menu v2 and Notify
+- Feather Core, Character, Assets, Inventory, Economy, Admin, Menu v2 and Notify
 - `h4nr-feather`
 - Optional: `h4nr-fuel`
 
@@ -40,6 +40,7 @@ The physical key decides who may use a vehicle. Whoever has the `vehicle_key` it
 - Keys are given with the normal inventory action. Giving one away stops a running engine.
 - Players cannot destroy an active key. A voided one is an ordinary item.
 - A key from a previous owner never counts. A vehicle with no current key (taken out before this version, or moved by an admin) stays usable by its owner.
+- **Recovery with a new key**: if the key is with someone else or lost, the owner asks for a new one from the list at a garage of that vehicle type. The player carrying the key is warned if online. After `GarageConfig.Rekey.waitSeconds` (600) the owner returns and pays `GarageConfig.Rekey.price` ($2500) in cash or by card. The old key is destroyed and the vehicle returns to the garage with the properties of its last parking. Nothing is charged before that point. Getting the key back cancels the request, and a vehicle with a driver is refused.
 - Taking a vehicle out when its old entity is gone replaces the key. On startup, keys of vehicles that no longer exist are voided.
 - `exports['h4nr-garages']:ToggleEngine(vehicle)` on the client gives panels the same check as the G key. `h4nr-vehiclecontrol` uses it.
 
@@ -73,9 +74,9 @@ exports['h4nr-garages']:RegisterPurchasedVehicle({
 python3 tests/run.py
 ```
 
-129 checks: 101 server checks (including the real Feather Assets validators), 13 for blips and 15 client checks on the real Menu v2, with SQL, Inventory and natives simulated. The syntax of every Lua file is checked too.
+160 checks: 125 server checks (including the real Feather Assets validators), 13 for blips and 22 client checks on the real Menu v2, with SQL, Inventory and natives simulated. The syntax of every Lua file is checked too.
 
-Still check in game: buying with cash and bank, retrying after an error, taking out and parking, colours, mods, fuel, the U and G keys, giving a key to another player and getting it back, a key in a trunk and on the ground, a full inventory, the F3 engine button, blips near and far and their removal on parking, reconnecting and restarting with a vehicle out, all three vehicle types, and a second character being refused.
+Still check in game: buying with cash and bank, retrying after an error, taking out and parking, colours, mods, fuel, the U and G keys, giving a key to another player and getting it back, a key in a trunk and on the ground, a full inventory, the F3 engine button, a key recovery with the wait and payment, blips near and far and their removal on parking, reconnecting and restarting with a vehicle out, all three vehicle types, and a second character being refused.
 
 After a restart, vehicles that still exist are re-attached by `asset_id`, and vehicles that are gone return to the garage. Position and damage after the last parking are not guaranteed to be saved if FXServer stops abruptly.
 

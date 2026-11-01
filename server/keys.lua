@@ -7,9 +7,9 @@ local byAsset, byInstance = {}, {}
 local function Inventory()
     return exports['feather-inventory']:initiate()
 end
-local function Remember(assetId, instance, owner)
+local function Remember(assetId, instance, owner, rekeyAt)
     instance = tonumber(instance)
-    byAsset[assetId], byInstance[instance] = { instance = instance, owner = owner }, assetId
+    byAsset[assetId], byInstance[instance] = { instance = instance, owner = owner, rekeyAt = tonumber(rekeyAt) }, assetId
 end
 local function Forget(assetId)
     local entry = byAsset[assetId]
@@ -31,6 +31,7 @@ function GarageKeys.Migrate()
             owner_id CHAR(36) NOT NULL,
             issued_to CHAR(36) NOT NULL,
             status ENUM('active','void') NOT NULL,
+            rekey_requested_at INT UNSIGNED NULL,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ]])
@@ -51,10 +52,10 @@ end
 function GarageKeys.Start()
     byAsset, byInstance = {}, {}
     local rows = DB.query(
-        "SELECT asset_id, key_instance_id, owner_id FROM h4nr_feather_vehicle_keys WHERE status = 'active'"
+        "SELECT asset_id, key_instance_id, owner_id, rekey_requested_at FROM h4nr_feather_vehicle_keys WHERE status = 'active'"
     ) or {}
     for _, row in ipairs(rows) do
-        Remember(row.asset_id, row.key_instance_id, row.owner_id)
+        Remember(row.asset_id, row.key_instance_id, row.owner_id, row.rekey_requested_at)
     end
     GarageKeys.InstallGuard()
 end
@@ -66,7 +67,10 @@ function GarageKeys.ActiveAssets()
     return ids
 end
 function GarageKeys.Void(assetId)
-    DB.exec("UPDATE h4nr_feather_vehicle_keys SET status = 'void' WHERE asset_id = ? AND status = 'active'", assetId)
+    DB.exec(
+        "UPDATE h4nr_feather_vehicle_keys SET status = 'void', rekey_requested_at = NULL WHERE asset_id = ? AND status = 'active'",
+        assetId
+    )
     local entry = Forget(assetId)
     if not entry then
         return
@@ -198,6 +202,39 @@ function GarageKeys.IsLent(assetId, owner, held)
 end
 function GarageKeys.IsCurrent(assetId, owner)
     return Current(assetId, owner) ~= nil
+end
+-- Recovery for an owner whose key is with someone else, or lost. Nothing is charged until
+-- the wait is over and the owner confirms in person, so an abandoned request costs nothing.
+local function ClearRekey(assetId, entry)
+    if entry.rekeyAt then
+        entry.rekeyAt = nil
+        DB.exec('UPDATE h4nr_feather_vehicle_keys SET rekey_requested_at = NULL WHERE asset_id = ?', assetId)
+    end
+end
+-- nil when not applicable (no current key, or the owner holds it, which ends any request).
+function GarageKeys.RekeyState(assetId, owner, held)
+    local entry = Current(assetId, owner)
+    if not entry or not held then
+        return nil
+    end
+    if held[assetId] then
+        ClearRekey(assetId, entry)
+        return nil
+    end
+    if not entry.rekeyAt then
+        return { state = 'none' }
+    end
+    local left = entry.rekeyAt + GarageConfig.Rekey.waitSeconds - os.time()
+    return left > 0 and { state = 'waiting', seconds = left } or { state = 'ready' }
+end
+function GarageKeys.RequestRekey(assetId)
+    local entry = byAsset[assetId]
+    entry.rekeyAt = os.time()
+    DB.exec('UPDATE h4nr_feather_vehicle_keys SET rekey_requested_at = ? WHERE asset_id = ?', entry.rekeyAt, assetId)
+    return entry.instance
+end
+function GarageKeys.Generation(assetId)
+    return DB.one('SELECT generation FROM h4nr_feather_vehicle_keys WHERE asset_id = ?', assetId).generation
 end
 -- Handing the key over stops a running engine, so the previous holder cannot keep driving.
 AddEventHandler('Feather:Inventory:ItemMoved', function(fact)

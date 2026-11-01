@@ -114,6 +114,7 @@ local function List(source, params)
         return result
     end
     local items = {}
+    local held = GarageKeys.Held(character)
     for _, asset in ipairs(result.value.items) do
         local row = Garage.Row(asset.assetId)
         if row and row.status ~= 'registering' then
@@ -124,10 +125,11 @@ local function List(source, params)
                 garage = row.garage,
                 state = row.status,
                 available = asset.status == 'active' and row.garage == params.garage,
+                rekey = asset.status == 'active' and GarageKeys.RekeyState(asset.assetId, character, held) or nil,
             }
         end
     end
-    return Garage.Ok({ items = items, nextCursor = result.value.nextCursor })
+    return Garage.Ok({ items = items, nextCursor = result.value.nextCursor, rekeyPrice = GarageConfig.Rekey.price })
 end
 -- Coordinates are resolved server-side from current ownership, even when the
 -- entity is outside the owner's streaming range. No arbitrary holder is accepted.
@@ -375,7 +377,82 @@ local function Keys(source, params)
     end
     return Garage.Err('forbidden')
 end
-for name, handler in pairs({ list = List, locations = Locations, retrieve = Retrieve, store = Store, keys = Keys }) do
+-- Tells whoever is carrying the key, so they can bring it back during the wait.
+local function WarnKeyHolder(instance)
+    for _, player in ipairs(GetPlayers()) do
+        local source = tonumber(player)
+        local character = Character(source)
+        if character and exports['feather-inventory']:initiate().Instances.GetItemForCharacter(character, instance).ok then
+            TriggerClientEvent('h4nr-garages:notify', source, 'rekey_warning')
+            return
+        end
+    end
+end
+local function Rekey(source, params)
+    if not AtGarage(source, params.garage) or not Owns(source, params.assetId) then
+        return Garage.Err('forbidden')
+    end
+    local character = Character(source)
+    local held = GarageKeys.Held(character)
+    if not held then
+        return Garage.Err('unavailable')
+    end
+    return Garage.Lock(params.assetId, function()
+        local state = GarageKeys.RekeyState(params.assetId, character, held)
+        if not state then
+            return Garage.Err('rekey_not_needed')
+        end
+        if state.state == 'none' then
+            local instance = GarageKeys.RequestRekey(params.assetId)
+            WarnKeyHolder(instance)
+            return Garage.Ok({ state = 'waiting', seconds = GarageConfig.Rekey.waitSeconds })
+        end
+        if state.state == 'waiting' then
+            return Garage.Err('rekey_waiting')
+        end
+        if params.method ~= 'cash' and params.method ~= 'bank' then
+            return Garage.Err('invalid_input')
+        end
+        local vehicle = Vehicle(params.assetId)
+        if vehicle and GetPedInVehicleSeat(vehicle, -1) ~= 0 then
+            return Garage.Err('vehicle_in_use')
+        end
+        local charged = GaragePayments.Charge({
+            characterId = character,
+            source = source,
+            method = params.method,
+            dollars = GarageConfig.Rekey.price,
+            referenceId = params.assetId,
+            key = ('rekey:%s:%s'):format(params.assetId, GarageKeys.Generation(params.assetId)),
+        })
+        if not charged.ok then
+            return charged
+        end
+        if vehicle then
+            DeleteEntity(vehicle)
+            local deadline = GetGameTimer() + 3000
+            while DoesEntityExist(vehicle) and GetGameTimer() < deadline do
+                Wait(50)
+            end
+            -- The charge is idempotent on this generation: confirming again pays nothing more.
+            if DoesEntityExist(vehicle) then
+                return Garage.Err('unavailable')
+            end
+            live[params.assetId] = nil
+        end
+        GarageKeys.Void(params.assetId)
+        DB.exec("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ?", params.assetId)
+        return Garage.Ok({ state = 'done' })
+    end)
+end
+for name, handler in pairs({
+    list = List,
+    locations = Locations,
+    retrieve = Retrieve,
+    store = Store,
+    keys = Keys,
+    rekey = Rekey,
+}) do
     local operation = handler
     local mutating = name ~= 'list' and name ~= 'locations'
     local route = name

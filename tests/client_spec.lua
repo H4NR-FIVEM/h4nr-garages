@@ -420,4 +420,42 @@ pressed = true
 replies['h4nr-garages:list'] = { ok = false, code = 'test_unknown_code' }
 frame()
 check('unknown server refusal exposes its stable code', notes[#notes]:find('test_unknown_code', 1, true) ~= nil)
+-- Recovery with a new key
+local function openRekey(rekey)
+    replies['h4nr-garages:list'] = {
+        ok = true,
+        value = {
+            rekeyPrice = 2500,
+            items = { { assetId = id, model = 't20', plate = 'LS12 ABC', state = 'out', available = true, rekey = rekey } },
+        },
+    }
+    pressed = true
+    frame()
+    local menuId = api.GetHealth().value.activeMenuId
+    return menuId, api.GetMenuState(menuId).value.pages[1]
+end
+local function click(menuId, opened, element)
+    nui.elementAction(
+        { menuId = menuId, pageId = opened.pageId, elementId = element.elementId, event = 'activate' },
+        function() end
+    )
+end
+replies['h4nr-garages:rekey'] = { ok = true, value = { state = 'waiting', seconds = 600 } }
+local menuId, opened = openRekey({ state = 'none' })
+check('recovery is offered with the plate', opened.elements[3].data.label == T('rekey_request'):format('LS12 ABC'))
+click(menuId, opened, opened.elements[3])
+check('the first press sends no payment method', rpcCalls[#rpcCalls].name == 'h4nr-garages:rekey'
+    and rpcCalls[#rpcCalls].params.assetId == id and rpcCalls[#rpcCalls].params.method == nil)
+check('the first press explains the wait', notes[#notes] == T('rekey_requested'))
+menuId, opened = openRekey({ state = 'waiting', seconds = 61 })
+check('the wait rounds up to minutes and cannot be pressed',
+    opened.elements[3].data.label == T('rekey_wait'):format('LS12 ABC', 2) and opened.elements[3].data.disabled)
+api.DestroyMenu(menuId)
+menuId, opened = openRekey({ state = 'ready' })
+check('both payment methods show the price', opened.elements[3].data.label == T('rekey_pay_cash'):format('LS12 ABC', 2500)
+    and opened.elements[4].data.label == T('rekey_pay_bank'):format('LS12 ABC', 2500))
+replies['h4nr-garages:rekey'] = { ok = true, value = { state = 'done' } }
+click(menuId, opened, opened.elements[4])
+check('paying sends the chosen method', rpcCalls[#rpcCalls].params.method == 'bank')
+check('recovery confirms the result', notes[#notes] == T('rekey_done'))
 print(('client_spec: %d checks passed'):format(passed))

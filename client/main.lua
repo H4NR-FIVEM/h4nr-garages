@@ -18,6 +18,9 @@ local function Call(name, params)
     end
     return result.value
 end
+RegisterNetEvent('h4nr-garages:notify', function(key)
+    Notify(key)
+end)
 local currentHint
 local function Hint(garageId, storing)
     local key = garageId and (garageId .. (storing and ':store' or ':open'))
@@ -131,6 +134,36 @@ local function Open(garageId, cursor)
                     end
                 end)
             end)
+        end
+        local function RekeyCall(assetId, method)
+            CreateThread(function()
+                local result = Call('rekey', { garage = garageId, assetId = assetId, method = method })
+                if result then
+                    Notify(result.state == 'done' and 'rekey_done' or 'rekey_requested')
+                    Close()
+                end
+            end)
+        end
+        for _, item in ipairs(data.items) do
+            local assetId = item.assetId
+            if item.rekey and item.rekey.state == 'none' then
+                Add('button', { label = T('rekey_request'):format(item.plate or '') }, function()
+                    RekeyCall(assetId)
+                end)
+            elseif item.rekey and item.rekey.state == 'waiting' then
+                Add('button', {
+                    label = T('rekey_wait'):format(item.plate or '', math.ceil(item.rekey.seconds / 60)),
+                    disabled = true,
+                })
+            elseif item.rekey and item.rekey.state == 'ready' then
+                for _, method in ipairs({ 'cash', 'bank' }) do
+                    Add('button', {
+                        label = T('rekey_pay_' .. method):format(item.plate or '', data.rekeyPrice or 0),
+                    }, function()
+                        RekeyCall(assetId, method)
+                    end)
+                end
+            end
         end
         if #data.items == 0 then
             Add('textdisplay', { value = T('unavailable') })

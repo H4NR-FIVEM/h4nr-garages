@@ -108,8 +108,14 @@ function MySQL.update.await(sql, p)
         return 1
     elseif sql:find('h4nr_feather_vehicle_keys SET status') then
         if keyRows[p[1]] then
-            keyRows[p[1]].status = 'void'
+            keyRows[p[1]].status, keyRows[p[1]].rekey_requested_at = 'void', nil
         end
+        return 1
+    elseif sql:find('SET rekey_requested_at = %?') then
+        keyRows[p[2]].rekey_requested_at = p[1]
+        return 1
+    elseif sql:find('SET rekey_requested_at = NULL') then
+        keyRows[p[1]].rekey_requested_at = nil
         return 1
     elseif sql:find('SET asset_id') then
         if failSaveAsset then
@@ -315,6 +321,27 @@ function inventory:GrantCharacterUniqueItemOnce(request)
     instances[nextInstance] = { inventoryId = characterInventories[request.characterId], metadata = request.metadata }
     return { ok = true, value = { instanceId = nextInstance } }
 end
+-- Modelled Economy: charges keyed by idempotency key.
+local charges, chargeCount, poor = {}, 0, false
+local economy = {}
+function economy:AwaitReady() return { ok = true } end
+function economy:RegisterOperatedReasons() return { ok = true } end
+function economy:FindAccountsByOwner()
+    return { ok = true, value = {
+        { accountId = 'wallet', currency = 'dollars', status = 'open', accountType = 'wallet' },
+        { accountId = 'bank', currency = 'dollars', status = 'open', accountType = 'bank', accountRef = 'h4nr' },
+    } }
+end
+function economy:GetSystemAccount() return { ok = true, value = { accountId = 'sink' } } end
+function economy:Transfer(request)
+    if poor then
+        return { ok = false, code = 'insufficient_funds' }
+    end
+    if not charges[request.idempotencyKey] then
+        charges[request.idempotencyKey], chargeCount = request, chargeCount + 1
+    end
+    return { ok = true, value = { transactionId = 't' } }
+end
 local core = {
     GetSessionContext = function(_, source)
         return { ok = true, value = { characterId = source == 1 and A or B } }
@@ -322,7 +349,7 @@ local core = {
 }
 exports = setmetatable({}, {
     __index = function(_, name)
-        return ({ ['feather-assets'] = assets, ['feather-core'] = core, ['feather-inventory'] = inventory })[name]
+        return ({ ['feather-assets'] = assets, ['feather-core'] = core, ['feather-inventory'] = inventory, ['feather-economy'] = economy })[name]
     end,
     __call = function(_, name, fn)
         api[name] = fn
@@ -350,6 +377,7 @@ FeatherRPC = {
 dofile(ROOT .. '/config/shared.lua')
 dofile(ROOT .. '/server/registration.lua')
 dofile(ROOT .. '/server/keys.lua')
+dofile(ROOT .. '/server/payments.lua')
 local request = {
     orderId = orderId,
     assetType = 'vehicle',
@@ -735,6 +763,68 @@ for _, fn in ipairs(threads) do
 end
 check('restart voids the key of a vanished car', not activeKey() and not instances[survivor])
 check('restart returns the vanished car to the garage', rows[orderId].status == 'stored')
+-- Recovery with a new key ------------------------------------------------------
+local fakeNow = os.time()
+local realTime = os.time
+os.time = function()
+    return fakeNow
+end
+function GetPlayers()
+    return { '1', '2' }
+end
+local function rekeyItem(source)
+    return call('list', { garage = 'pillboxgarage' }, source or 1).value.items[1]
+end
+local rekeySpec = { garage = 'pillboxgarage', assetId = assetId }
+coords[1], coords[2] = GarageConfig.Garages.pillboxgarage.coords, GarageConfig.Garages.pillboxgarage.coords
+check('retrieve for recovery', call('retrieve', spec).ok)
+local lostKey = activeKey()
+local recoverCar = next(entities)
+drivers[recoverCar] = 0
+check('the owner holding the key is offered no recovery', rekeyItem().rekey == nil)
+check('the owner holding the key cannot start recovery', call('rekey', rekeySpec).code == 'rekey_not_needed')
+instances[lostKey].inventoryId = 2
+check('a stranger cannot start recovery', call('rekey', rekeySpec, 2).code == 'forbidden')
+check('recovery is offered once the key is away', rekeyItem().rekey.state == 'none')
+events = {}
+local requested = call('rekey', rekeySpec)
+check('the first press only starts the wait', requested.value.state == 'waiting' and chargeCount == 0)
+check('the player with the key is warned', events[1] and events[1].name == 'h4nr-garages:notify'
+    and events[1].source == 2 and events[1].args[1] == 'rekey_warning')
+check('the wait is reported', rekeyItem().rekey.state == 'waiting' and rekeyItem().rekey.seconds == 600)
+check('confirming early is refused', call('rekey', rekeySpec).code == 'rekey_waiting' and chargeCount == 0)
+check('the wait survives a restart', (function()
+    GarageKeys.Start()
+    return rekeyItem().rekey.state == 'waiting'
+end)())
+instances[lostKey].inventoryId = 1
+check('getting the key back cancels the request', rekeyItem().rekey == nil and keyRows[assetId].rekey_requested_at == nil)
+instances[lostKey].inventoryId = 2
+call('rekey', rekeySpec)
+fakeNow = fakeNow + 601
+check('after the wait the owner can confirm', rekeyItem().rekey.state == 'ready')
+check('confirming needs a payment method', call('rekey', rekeySpec).code == 'invalid_input')
+drivers[recoverCar] = 2
+check('a driven car cannot be recovered', call('rekey', { garage = 'pillboxgarage', assetId = assetId, method = 'cash' }).code == 'vehicle_in_use')
+check('a refused recovery charges nothing', chargeCount == 0 and instances[lostKey])
+drivers[recoverCar] = 0
+poor = true
+check('no money, no recovery', call('rekey', { garage = 'pillboxgarage', assetId = assetId, method = 'bank' }).code == 'no_money')
+check('no money keeps the key valid', instances[lostKey] and activeKey() == lostKey)
+poor = false
+refuseDelete = true
+local payCash = { garage = 'pillboxgarage', assetId = assetId, method = 'cash' }
+check('a stuck car fails after the charge', call('rekey', payCash).code == 'unavailable' and chargeCount == 1)
+refuseDelete = false
+check('recovery completes', call('rekey', payCash).value.state == 'done')
+check('confirming again pays once', chargeCount == 1)
+for _, charge in pairs(charges) do
+    check('recovery is charged the configured price', charge.amount == 250000 and charge.reasonCode == 'h4nr_garages.rekey')
+end
+check('recovery destroys the key wherever it is', not instances[lostKey] and not activeKey())
+check('recovery returns the car to the garage', rows[orderId].status == 'stored' and not entities[recoverCar])
+check('the next retrieval issues a new key', call('retrieve', spec).ok and activeKey() ~= lostKey and instances[activeKey()].inventoryId == 1)
+os.time = realTime
 destroyGuards['h4nr-garages:vehicle-key'] = nil
 eventHandlers.onResourceStart('feather-inventory')
 threads[#threads]()
