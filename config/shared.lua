@@ -13,6 +13,13 @@ GarageConfig = {
             spawn = vector4(229.7, -800.1, 30.6, 157.0),
             sprite = 357,
         },
+        burtongarage = {
+            label = 'Burton — Garaj',
+            assetType = 'vehicle',
+            coords = vector3(-372.412, -122.488, 38.683),
+            spawn = vector4(-372.412, -122.488, 38.683, 234.850),
+            sprite = 357,
+        },
         marina = {
             label = 'Puerto del Sol — Port',
             assetType = 'boat',
