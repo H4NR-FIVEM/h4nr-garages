@@ -484,9 +484,9 @@ check('damage and fuel persist', saved.engineHealth == 900 and saved.fuelLevel =
 coords[1] = GarageConfig.Garages.pillboxgarage.coords
 check('parked vehicle retrieves again', call('retrieve', spec).ok and spawnCount == 2)
 caller = 'foreign'
-check('work vehicle export refuses unrelated callers', api.GetWorkVehicle({assetId=orderId}).code == 'forbidden')
+check('work vehicle export refuses unrelated callers', api.GetWorkVehicle({assetId=assetId}).code == 'forbidden')
 caller = 'petrolist_job'
-local workVehicle = api.GetWorkVehicle({assetId=orderId})
+local workVehicle = api.GetWorkVehicle({assetId=assetId})
 check('work vehicle export resolves the server live registry', workVehicle.ok and type(workVehicle.value.netId)=='number')
 check('work vehicle export validates persistent identity', api.GetWorkVehicle({assetId='not-a-uuid'}).code == 'forbidden')
 print(('server_spec: %d checks passed'):format(passed))
