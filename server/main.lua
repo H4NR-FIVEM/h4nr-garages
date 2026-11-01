@@ -21,6 +21,14 @@ local function Vehicle(assetId)
         end
     end
 end
+exports('GetWorkVehicle', function(request)
+    if GetInvokingResource() ~= 'petrolist_job' or type(request) ~= 'table' or not Garage.Uuid(request.assetId) then
+        return Garage.Err('forbidden')
+    end
+    local entity = live[request.assetId]
+    if not entity or not DoesEntityExist(entity) then return Garage.Err('vehicle_not_out') end
+    return Garage.Ok({ netId = NetworkGetNetworkIdFromEntity(entity) })
+end)
 local function Owns(source, assetId)
     local character = Character(source)
     if not character or not Garage.Uuid(assetId) then
