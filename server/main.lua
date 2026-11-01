@@ -70,6 +70,11 @@ local function AtGarage(source, garageId)
     end
     return garage
 end
+local function InParkRange(garage, vehicle)
+    local at = GetEntityCoords(vehicle)
+    local spawn = vector3(garage.spawn.x, garage.spawn.y, garage.spawn.z)
+    return #(at - garage.coords) <= GarageConfig.ParkDistance or #(at - spawn) <= GarageConfig.ParkDistance
+end
 local function SpawnType(model, assetType)
     -- Trusted catalogue supplied by the shop; classify motorcycles and helicopters
     -- on the server via a temporary model entity when FiveM knows no type yet.
@@ -118,8 +123,14 @@ local function List(source, params)
     for _, asset in ipairs(result.value.items) do
         local row = Garage.Row(asset.assetId)
         if row and row.status ~= 'registering' then
+            local vehicle = row.status == 'out' and asset.status == 'active' and Vehicle(asset.assetId)
+            local parkable = vehicle
+                and GetPedInVehicleSeat(vehicle, -1) == 0
+                and GetEntityRoutingBucket(vehicle) == 0
+                and InParkRange(garage, vehicle)
             items[#items + 1] = {
                 assetId = asset.assetId,
+                parkNetId = parkable and NetworkGetNetworkIdFromEntity(vehicle) or nil,
                 model = asset.modelKey,
                 plate = asset.identifiers.plate,
                 garage = row.garage,
@@ -300,13 +311,15 @@ local function Store(source, params)
         local vehicle = Vehicle(params.assetId)
         local ped = GetPlayerPed(source)
         local read = assets:GetAsset({ assetId = params.assetId })
+        local driver = vehicle and GetPedInVehicleSeat(vehicle, -1)
+        -- Either driven in, or left empty near the garage and parked from its menu.
+        local placed = driver == ped and Near(source, GetEntityCoords(vehicle), 6)
+            or driver == 0 and InParkRange(garage, vehicle)
         if
-            not vehicle
-            or GetPedInVehicleSeat(vehicle, -1) ~= ped
+            not placed
             or not read.ok
             or read.value.assetType ~= garage.assetType
             or GetEntityRoutingBucket(vehicle) ~= 0
-            or not Near(source, GetEntityCoords(vehicle), 6)
         then
             return Garage.Err('forbidden')
         end

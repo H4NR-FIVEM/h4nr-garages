@@ -1,6 +1,7 @@
 GarageConfig = {
     DefaultLang = 'ro',
     Distance = 3.0,
+    ParkDistance = 30.0,
     Marker = { type = 2, drawDistance = 25.0, scale = 0.35, color = { 0, 128, 0, 180 } },
     VehicleBlip = {
         enabled = true,

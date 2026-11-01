@@ -458,4 +458,41 @@ replies['h4nr-garages:rekey'] = { ok = true, value = { state = 'done' } }
 click(menuId, opened, opened.elements[4])
 check('paying sends the chosen method', rpcCalls[#rpcCalls].params.method == 'bank')
 check('recovery confirms the result', notes[#notes] == T('rekey_done'))
+local streamed = true
+function NetworkDoesEntityExistWithNetworkId()
+    return streamed
+end
+function NetToVeh(netId)
+    return netId + 1000
+end
+lib.getVehicleProperties = function(vehicle)
+    return { fromVehicle = vehicle }
+end
+replies['h4nr-garages:store'] = { ok = true, value = true }
+local function openParkable()
+    replies['h4nr-garages:list'] = {
+        ok = true,
+        value = {
+            items = {
+                { assetId = id, model = 'hydra', plate = 'LS56 FEU', state = 'out', available = false, parkNetId = 7 },
+            },
+        },
+    }
+    pressed = true
+    frame()
+    local menuId = api.GetHealth().value.activeMenuId
+    return menuId, api.GetMenuState(menuId).value.pages[1]
+end
+menuId, opened = openParkable()
+check('a car in range offers parking, even from another garage',
+    opened.elements[2].data.label:find(T('store_label'), 1, true) and not opened.elements[2].data.disabled)
+click(menuId, opened, opened.elements[2])
+check('the menu parks the listed car with its own properties', rpcCalls[#rpcCalls].name == 'h4nr-garages:store'
+    and rpcCalls[#rpcCalls].params.assetId == id and rpcCalls[#rpcCalls].params.props.fromVehicle == 1007)
+check('parking from the menu confirms and closes', notes[#notes] == T('parked') and api.GetHealth().value.activeMenuId == nil)
+streamed = false
+menuId, opened = openParkable()
+local callsBefore = #rpcCalls
+click(menuId, opened, opened.elements[2])
+check('a car that left the stream is not parked', #rpcCalls == callsBefore and notes[#notes] == T('too_far'))
 print(('client_spec: %d checks passed'):format(passed))

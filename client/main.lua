@@ -84,6 +84,17 @@ local function Close()
         menu:DestroyMenu(previous)
     end
 end
+local function Park(garageId, assetId, vehicle)
+    local props = lib.getVehicleProperties(vehicle)
+    if GetResourceState('h4nr-fuel') == 'started' then
+        props.fuelLevel = exports['h4nr-fuel']:GetFuel(vehicle)
+    end
+    if Call('store', { garage = garageId, assetId = assetId, props = props }) then
+        Notify('parked')
+        return true
+    end
+    return false
+end
 local function Open(garageId, cursor)
     if opening then
         return
@@ -123,12 +134,20 @@ local function Open(garageId, cursor)
         for _, item in ipairs(data.items) do
             local assetId = item.assetId
             local usable = item.available and (item.state == 'stored' or item.state == 'out')
+            local parkNetId = item.parkNetId
             Add('button', {
-                label = ('%s · %s · %s'):format(item.model, item.plate or '', T(item.state)),
-                disabled = not usable,
+                label = ('%s · %s · %s'):format(item.model, item.plate or '', T(parkNetId and 'store_label' or item.state)),
+                disabled = not usable and not parkNetId,
             }, function()
                 CreateThread(function()
-                    local result = Call('retrieve', { garage = garageId, assetId = assetId })
+                    local result
+                    if not parkNetId then
+                        result = Call('retrieve', { garage = garageId, assetId = assetId })
+                    elseif NetworkDoesEntityExistWithNetworkId(parkNetId) then
+                        result = Park(garageId, assetId, NetToVeh(parkNetId))
+                    else
+                        Notify('too_far')
+                    end
                     if result then
                         Close()
                     end
@@ -306,13 +325,7 @@ CreateThread(function()
                         else
                             local assetId = Entity(vehicle).state.h4nrAssetId
                             if assetId then
-                                local props = lib.getVehicleProperties(vehicle)
-                                if GetResourceState('h4nr-fuel') == 'started' then
-                                    props.fuelLevel = exports['h4nr-fuel']:GetFuel(vehicle)
-                                end
-                                if Call('store', { garage = garageId, assetId = assetId, props = props }) then
-                                    Notify('parked')
-                                end
+                                Park(garageId, assetId, vehicle)
                             else
                                 Notify('forbidden')
                             end

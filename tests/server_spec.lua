@@ -661,11 +661,26 @@ check(
 drivers[entity] = 1
 check('owner starts engine', call('keys', { assetId = assetId, action = 'engine' }).value.running)
 spec.props = { engineHealth = 900, bodyHealth = 800, fuelLevel = 55, color1 = 27, color2 = 0, plate = 'FORGED' }
+local function listedCar()
+    return call('list', { garage = 'pillboxgarage' }).value.items[1]
+end
+local parkedAt = coords[entity]
+check('a driven car is not offered for parking from the menu', listedCar().parkNetId == nil)
+drivers[entity] = 2
+check('a car someone else drives cannot be parked on foot', call('store', spec).code == 'forbidden')
+drivers[entity] = 0
+check('an empty car in range is offered for parking', listedCar().parkNetId == entity + 100)
+coords[entity] = vector3(parkedAt.x + GarageConfig.ParkDistance + 40, parkedAt.y, parkedAt.z)
+check('an empty car out of range is not offered', listedCar().parkNetId == nil)
+check('an empty car out of range cannot be parked', call('store', spec).code == 'forbidden')
+coords[entity] = parkedAt
+drivers[entity] = 1
 refuseDelete = true
 check('failed entity deletion does not mark stored', not call('store', spec).ok and rows[orderId].status == 'out')
 refuseDelete = false
+drivers[entity] = 0
 check(
-    'owner parks at spawn point',
+    'owner parks an empty car from the menu',
     call('store', spec).ok and rows[orderId].status == 'stored' and not entities[entity]
 )
 check('parking removes location', #call('locations', {}).value.items == 0)
