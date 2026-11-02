@@ -53,6 +53,33 @@ local function CanOperate(source, assetId)
     end
     return false, character == owner.holderId and 'key_not_here' or 'forbidden'
 end
+-- Answers another resource's question about a live vehicle. The state bag alone proves nothing,
+-- because a client that owns an entity can write it: the entity must also be the one this
+-- resource knows for that asset, and the asset must be out of the garage.
+exports('GetVehicleAccess', function(request)
+    if not GarageConfig.TrustedAccessReaders[GetInvokingResource()] or type(request) ~= 'table' then
+        return Garage.Err('forbidden')
+    end
+    if not Garage.ready then
+        return Garage.Err('unavailable')
+    end
+    local entity = request.entity
+    local assetId = type(entity) == 'number' and DoesEntityExist(entity) and Entity(entity).state.h4nrAssetId
+    if not Garage.Uuid(assetId) or Vehicle(assetId) ~= entity then
+        return Garage.Err('not_registered')
+    end
+    local row = DB.one('SELECT status FROM h4nr_feather_vehicles WHERE asset_id = ?', assetId)
+    local read = assets:GetAsset({ assetId = assetId })
+    local owner = read.ok and read.value.status == 'active' and read.value.owner
+    if not row or row.status ~= 'out' or not owner or owner.holderType ~= 'character' then
+        return Garage.Err('not_registered')
+    end
+    local character = Character(request.source)
+    return Garage.Ok({
+        assetId = assetId,
+        hasKey = character ~= nil and GarageKeys.Allows(character, assetId, owner.holderId),
+    })
+end)
 function GarageKeys.OnKeyMoved(assetId)
     local vehicle = Vehicle(assetId)
     if vehicle then

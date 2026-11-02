@@ -748,6 +748,29 @@ check('key in a trunk counts as given', call('locations', {}).value.items[1].len
 check('key in a trunk gives nobody a holder blip', #call('locations', {}, 2).value.items == 0)
 give(keyId, 1)
 check('getting the key back restores use', call('keys', { assetId = assetId, action = 'lock' }).ok)
+-- Vehicle access for h4nr-vehicleinventory.
+local function access(entity, source)
+    return api.GetVehicleAccess({ entity = entity, source = source or 1 })
+end
+caller = 'evil'
+check('vehicle access refuses an untrusted resource', access(vehicleNow).code == 'forbidden')
+caller = 'h4nr-vehicleinventory'
+local accessOwner = access(vehicleNow)
+check('vehicle access names the asset and the key', accessOwner.ok and accessOwner.value.assetId == assetId and accessOwner.value.hasKey)
+check('vehicle access knows who lacks the key', access(vehicleNow, 2).ok and access(vehicleNow, 2).value.hasKey == false)
+give(keyId, TRUNK)
+check('a key in the trunk does not count as having it', access(vehicleNow).value.hasKey == false)
+give(keyId, 1)
+check('vehicle access refuses a missing entity', access(424242).code == 'not_registered')
+local spoofed = 424243
+entities[spoofed] = true
+Entity(spoofed).state:set('h4nrAssetId', assetId, true)
+check('a copied state bag does not make another vehicle the asset', access(spoofed).code == 'not_registered')
+entities[spoofed] = nil
+findRow(assetId).status = 'stored'
+check('a parked asset has no live access', access(vehicleNow).code == 'not_registered')
+findRow(assetId).status = 'out'
+caller = 'h4nr-vehicleshop'
 check('getting the key back restores the blip', not call('locations', {}).value.items[1].lent)
 local guard = destroyGuards['h4nr-garages:vehicle-key']
 check('players cannot destroy an active key', guard({ id = keyId }, { actorSource = 1 }) == false)
