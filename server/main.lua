@@ -99,6 +99,17 @@ local function SpawnType(model, assetType)
     }
     return allowed[assetType] and allowed[assetType][kind] and kind or nil
 end
+-- The h4nr-feather state-bag handler passes color1/color2 to SET_VEHICLE_COLOURS, which
+-- only takes paint indexes. Custom RGB paint reaches the car through the ready event.
+local function SpawnProps(props)
+    local copy = {}
+    for key, value in pairs(props) do
+        if (key ~= 'color1' and key ~= 'color2') or type(value) == 'number' then
+            copy[key] = value
+        end
+    end
+    return copy
+end
 local function List(source, params)
     local garage = AtGarage(source, params.garage)
     local character = Character(source)
@@ -273,7 +284,7 @@ local function Retrieve(source, params)
             model = asset.modelKey,
             type = kind,
             spawnSource = garage.spawn,
-            props = props,
+            props = SpawnProps(props),
             bucket = 0,
         })
         if not ok or not netId then

@@ -559,6 +559,7 @@ end
 FeatherVehicles = {
     spawnVehicle = function(spec)
         spawnCount = spawnCount + 1
+        lastSpawnProps = spec.props
         local entity = CreateVehicle()
         coords[entity] = vector3(spec.spawnSource.x, spec.spawnSource.y, spec.spawnSource.z)
         return entity + 100, entity
@@ -688,7 +689,13 @@ local saved = json.decode(rows[orderId].props_json)
 check('server preserves authoritative plate', saved.plate == 'LS99 XYZ')
 check('damage and fuel persist', saved.engineHealth == 900 and saved.fuelLevel == 55)
 coords[1] = GarageConfig.Garages.pillboxgarage.coords
+-- Custom paint is saved as an RGB table, which SET_VEHICLE_COLOURS refuses.
+saved.color1, saved.color2 = { 12, 34, 56 }, 7
+rows[orderId].props_json = json.encode(saved)
 check('parked vehicle retrieves again', call('retrieve', spec).ok and spawnCount == 2)
+check('RGB paint stays out of the spawn state bag', lastSpawnProps.color1 == nil and lastSpawnProps.color2 == 7)
+local readyProps = events[#events].args[2]
+check('RGB paint still reaches the driver', events[#events].name == 'h4nr-garages:ready' and readyProps.color1[1] == 12)
 caller = 'foreign'
 check('work vehicle export refuses unrelated callers', api.GetWorkVehicle({assetId=assetId}).code == 'forbidden')
 caller = 'petrolist_job'
