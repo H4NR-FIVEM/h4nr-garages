@@ -247,6 +247,31 @@ RegisterNetEvent('h4nr-garages:engine', function(netId, running)
         end
     end)
 end)
+-- The server decides from the key. Blocked until it answers, and when it cannot answer.
+local drive = { vehicle = nil, allowed = false, checkedAt = nil, checking = false, told = false }
+local function DriveAllowed(vehicle, assetId)
+    if drive.vehicle ~= vehicle then
+        drive.vehicle, drive.allowed, drive.checkedAt, drive.told = vehicle, false, nil, false
+    end
+    local now = GetGameTimer()
+    if not drive.checking and (not drive.checkedAt or now - drive.checkedAt >= GarageConfig.Key.checkMs) then
+        drive.checking, drive.checkedAt = true, now
+        CreateThread(function()
+            local reply = FeatherRPC:CallAsync('h4nr-garages:canDrive', { assetId = assetId })
+            drive.checking = false
+            if drive.vehicle == vehicle then
+                drive.allowed = type(reply) == 'table' and reply.ok == true and reply.value.allowed == true
+                if not drive.allowed and not drive.told then
+                    drive.told = true
+                    Notify('key_not_here')
+                elseif drive.allowed then
+                    drive.told = false
+                end
+            end
+        end)
+    end
+    return drive.allowed
+end
 local function Key(action)
     local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
     if vehicle == 0 then
@@ -338,16 +363,22 @@ CreateThread(function()
         if not shownHint or activeMenu or opening then
             Hint(nil)
         end
-        -- Prevent GTA's automatic engine start while the server says it is off.
+        -- Prevent GTA's automatic engine start while the server says it is off, and keep
+        -- a driver without the key from moving a car someone else left running.
         local vehicle = GetVehiclePedIsIn(ped, false)
-        if
-            vehicle ~= 0
-            and Entity(vehicle).state.h4nrAssetId
-            and Entity(vehicle).state.h4nrGarageEngine == false
-            and GetPedInVehicleSeat(vehicle, -1) == ped
-        then
-            SetVehicleEngineOn(vehicle, false, true, true)
-            pause = 0
+        local assetId = vehicle ~= 0 and Entity(vehicle).state.h4nrAssetId
+        if assetId and GetPedInVehicleSeat(vehicle, -1) == ped then
+            local allowed = DriveAllowed(vehicle, assetId)
+            if not allowed or Entity(vehicle).state.h4nrGarageEngine == false then
+                SetVehicleEngineOn(vehicle, false, true, true)
+                pause = 0
+            end
+            if not allowed then
+                DisableControlAction(0, 71, true)
+                DisableControlAction(0, 72, true)
+            end
+        else
+            drive.vehicle = nil
         end
         Wait(pause)
     end

@@ -14,6 +14,7 @@ GarageConfig = {
     },
     Rekey = { price = 2500, waitSeconds = 600 },
     Key = {
+        checkMs = 3000,
         label = 'Cheie · %s',
         destroyRefused = 'Cheia mașinii nu poate fi aruncată. Parchează mașina sau recuperează cheia la garaj.',
     },

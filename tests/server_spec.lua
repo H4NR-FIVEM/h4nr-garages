@@ -728,6 +728,8 @@ check('giving the key stops a running engine', Entity(vehicleNow).state.h4nrGara
 check('owner without the key is refused', call('keys', { assetId = assetId, action = 'lock' }).code == 'key_not_here')
 check('new holder can lock', call('keys', { assetId = assetId, action = 'lock' }, 2).ok)
 drivers[vehicleNow] = 1
+check('the wheel refuses the owner without the key', call('canDrive', { assetId = assetId }).value.allowed == false)
+check('the wheel accepts the player with the key', call('canDrive', { assetId = assetId }, 2).value.allowed == true)
 check('owner in the seat cannot start without the key',
     call('keys', { assetId = assetId, action = 'engine' }).code == 'key_not_here')
 drivers[vehicleNow] = 2
@@ -810,6 +812,8 @@ assetsById[assetId].owner.holderId = A
 -- Vehicles taken out before keys existed stay usable by their owner only.
 GarageKeys.Void(assetId)
 check('owner uses a car with no key record', call('keys', { assetId = assetId, action = 'lock' }).ok)
+check('a stranger cannot drive a car with no key record', call('canDrive', { assetId = assetId }, 2).value.allowed == false)
+check('the owner can drive a car with no key record', call('canDrive', { assetId = assetId }).value.allowed == true)
 check('stranger cannot use a car with no key record', call('keys', { assetId = assetId, action = 'lock' }, 2).code == 'forbidden')
 -- Restart: a surviving car keeps its key, a vanished one loses it.
 GarageKeys.Issue(assetsById[assetId], A)

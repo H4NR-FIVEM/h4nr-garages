@@ -306,8 +306,18 @@ end
 function GetPedInVehicleSeat()
     return 1
 end
+vehicleState = { h4nrAssetId = '11111111-1111-1111-1111-111111111111', h4nrGarageEngine = true }
 function Entity()
-    return { state = { h4nrAssetId = '11111111-1111-1111-1111-111111111111', h4nrGarageEngine = true } }
+    return { state = vehicleState }
+end
+engineStops, disabledControls = 0, {}
+function SetVehicleEngineOn(_, on)
+    if on == false then
+        engineStops = engineStops + 1
+    end
+end
+function DisableControlAction(_, control)
+    disabledControls[control] = true
 end
 local markers = {}
 function DrawMarker(kind, x, y, z)
@@ -420,6 +430,57 @@ pressed = true
 replies['h4nr-garages:list'] = { ok = false, code = 'test_unknown_code' }
 frame()
 check('unknown server refusal exposes its stable code', notes[#notes]:find('test_unknown_code', 1, true) ~= nil)
+-- Driving needs the key even when someone left the engine running.
+vehicleState = { h4nrAssetId = id, h4nrGarageEngine = true }
+clock = 100000
+function GetGameTimer()
+    return clock
+end
+engineStops, disabledControls = 0, {}
+currentVehicle = 88
+ped.coords = vector3(0, 0, 0)
+replies['h4nr-garages:canDrive'] = { ok = true, value = { allowed = false } }
+frame()
+check('the wheel asks the server', rpcCalls[#rpcCalls].name == 'h4nr-garages:canDrive' and rpcCalls[#rpcCalls].params.assetId == id)
+check('a running engine stops for a driver without the key', engineStops > 0)
+check('a driver without the key cannot accelerate', disabledControls[71] and disabledControls[72])
+check('the driver is told why', notes[#notes] == T('key_not_here'))
+local told, asked = #notes, #rpcCalls
+frame()
+check('the check is rate limited', #rpcCalls == asked)
+clock = clock + GarageConfig.Key.checkMs
+frame()
+check('the check repeats', #rpcCalls == asked + 1)
+check('the refusal is not repeated', #notes == told)
+replies['h4nr-garages:canDrive'] = { ok = true, value = { allowed = true } }
+clock = clock + GarageConfig.Key.checkMs
+frame()
+engineStops, disabledControls = 0, {}
+frame()
+check('with the key a running engine is left alone', engineStops == 0 and not disabledControls[71])
+vehicleState.h4nrGarageEngine = false
+frame()
+check('with the key a stopped engine still waits for G', engineStops > 0 and not disabledControls[71])
+vehicleState.h4nrGarageEngine = true
+replies['h4nr-garages:canDrive'] = function()
+    return nil, { code = 'timeout' }
+end
+clock = clock + GarageConfig.Key.checkMs
+frame()
+engineStops = 0
+frame()
+check('a failed check blocks driving', engineStops > 0 and disabledControls[71])
+currentVehicle = 0
+frame()
+replies['h4nr-garages:canDrive'] = { ok = true, value = { allowed = true } }
+currentVehicle = 88
+engineStops = 0
+frame()
+check('getting back in starts a new check', rpcCalls[#rpcCalls].name == 'h4nr-garages:canDrive')
+currentVehicle = 0
+vehicleState = {}
+ped.coords = GarageConfig.Garages.pillboxgarage.coords
+frame()
 -- Recovery with a new key
 local function openRekey(rekey)
     replies['h4nr-garages:list'] = {

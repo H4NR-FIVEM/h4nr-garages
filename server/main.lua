@@ -469,7 +469,13 @@ local function Rekey(source, params)
         return Garage.Ok({ state = 'done' })
     end)
 end
+-- Read by the driver's client: whoever sits at the wheel needs the key, whatever the engine state.
+local function CanDrive(source, params)
+    local allowed = CanOperate(source, params.assetId)
+    return Garage.Ok({ allowed = allowed })
+end
 for name, handler in pairs({
+    canDrive = CanDrive,
     list = List,
     locations = Locations,
     retrieve = Retrieve,
@@ -478,7 +484,7 @@ for name, handler in pairs({
     rekey = Rekey,
 }) do
     local operation = handler
-    local mutating = name ~= 'list' and name ~= 'locations'
+    local mutating = name ~= 'list' and name ~= 'locations' and name ~= 'canDrive'
     local route = name
     FeatherRPC:Register('h4nr-garages:' .. name, function(params, respond, source)
         if not Garage.ready then

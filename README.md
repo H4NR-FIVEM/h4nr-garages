@@ -38,6 +38,7 @@ Default locations: Pillbox for cars, Puerto del Sol for boats and LSIA for aircr
 The physical key decides who may use a vehicle. Whoever has the `vehicle_key` item in their personal inventory can lock, start and park the car; the owner without it cannot, and sees "You do not have the key". A key in a trunk, a stash or on the ground works for nobody until someone picks it up.
 
 - A vehicle has at most one active key. Each new key gets a new generation in `h4nr_feather_vehicle_keys`, so older ones stop counting even if their item survives.
+- A driver without the key cannot move the vehicle, even if someone left the engine running: the client asks the server when the driver sits down and every `GarageConfig.Key.checkMs` (3 s), and stays blocked if the server cannot answer. Passengers are not affected.
 - Keys are given with the normal inventory action. Giving one away stops a running engine.
 - Players cannot destroy an active key. A voided one is an ordinary item.
 - A key from a previous owner never counts. A vehicle with no current key (taken out before this version, or moved by an admin) stays usable by its owner.
@@ -90,7 +91,7 @@ exports['h4nr-garages']:TransferReservedVehicle({ saleId = '<uuid>', assetId = '
 python3 tests/run.py
 ```
 
-189 checks: 154 server checks (including the real Feather Assets validators), 13 for blips and 22 client checks on the real Menu v2, with SQL, Inventory and natives simulated. The syntax of every Lua file is checked too.
+215 checks: 165 server checks (including the real Feather Assets validators), 13 for blips and 37 client checks on the real Menu v2, with SQL, Inventory and natives simulated. The syntax of every Lua file is checked too.
 
 Still check in game: buying with cash and bank, retrying after an error, taking out and parking, colours, mods, fuel, the U and G keys, giving a key to another player and getting it back, a key in a trunk and on the ground, a full inventory, the F3 engine button, a key recovery with the wait and payment, blips near and far and their removal on parking, reconnecting and restarting with a vehicle out, all three vehicle types, and a second character being refused.
 
