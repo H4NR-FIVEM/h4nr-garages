@@ -182,6 +182,10 @@ end
 function DisableControlAction(_, control)
     disabledControls[control] = true
 end
+local groundZ
+function GetGroundZFor_3dCoord()
+    return groundZ ~= nil, groundZ or 0.0
+end
 local markers = {}
 function DrawMarker(kind, x, y, z)
     markers[#markers + 1] = { kind = kind, x = x, y = y, z = z }
@@ -295,6 +299,7 @@ check('owner key commands registered', commands.feathervehiclelock and commands.
 check(
     'job-style arrow marks the garage',
     markers[1].kind == 2 and markers[1].x == GarageConfig.Garages.pillboxgarage.coords.x
+        and GarageConfig.Marker.scale == 0.2 and GarageConfig.Marker.color[4] == 155
 )
 local sawHint = false
 for _, hint in ipairs(hints) do
@@ -316,6 +321,22 @@ ped.coords = vector3(
 )
 frame()
 check('driver sees parking marker at the spawn point', markers[#markers].x == ped.coords.x)
+check('before the ground loads the arrow still shows', markers[#markers].z == ped.coords.z + 1.0)
+groundZ = ped.coords.z - 1.0
+frame()
+local arrowHeight = groundZ + GarageConfig.Marker.height
+check('the arrow stands at job height above the ground', markers[#markers].z == arrowHeight)
+groundZ = 90.0
+frame()
+check('the ground is read once', markers[#markers].z == arrowHeight)
+local pillboxSpawn = ped.coords
+local water = GarageConfig.Garages.marina.spawn
+ped.coords = vector3(water.x, water.y, water.z)
+groundZ = -20.0
+frame()
+check('over water the arrow stays above the seabed', markers[#markers].z == water.z - 1.5 + GarageConfig.Marker.height)
+ped.coords = pillboxSpawn
+frame()
 check('driver prompt offers E to park', hints[#hints].tabs[1].controls[1].label == T('store_label'))
 currentVehicle = 0
 ped.coords = GarageConfig.Garages.pillboxgarage.coords

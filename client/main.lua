@@ -24,13 +24,28 @@ local function Hint(garageId, parking, listToo)
         activeTab = 1,
     })
 end
-local function Marker(at)
+-- Points are saved at ground or at player height, so the arrow is placed from the ground. The
+-- ground is only known once its collision has loaded, and over water it is the seabed.
+local markerHeights = { [true] = {}, [false] = {} }
+local function MarkerHeight(garage, driving, at)
+    local height = markerHeights[driving][garage]
+    if not height then
+        local found, ground = GetGroundZFor_3dCoord(at.x, at.y, at.z + 2.0, false)
+        if not found then
+            return at.z + 1.0
+        end
+        height = math.max(ground, at.z - 1.5) + GarageConfig.Marker.height
+        markerHeights[driving][garage] = height
+    end
+    return height
+end
+local function Marker(garage, driving, at)
     local spec = GarageConfig.Marker
     DrawMarker(
         spec.type,
         at.x,
         at.y,
-        at.z + 0.1,
+        MarkerHeight(garage, driving, at),
         0.0,
         0.0,
         0.0,
@@ -223,7 +238,7 @@ CreateThread(function()
                 local at = vehicle == 0 and garage.coords or spawn
                 if #(coords - at) <= GarageConfig.Marker.drawDistance then
                     pause = 0
-                    Marker(at)
+                    Marker(garage, vehicle ~= 0, at)
                 end
                 local near = #(coords - garage.coords) <= GarageConfig.Distance
                     or (vehicle ~= 0 and #(coords - spawn) <= 8.0)

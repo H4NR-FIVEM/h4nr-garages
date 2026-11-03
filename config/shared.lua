@@ -4,7 +4,7 @@ GarageConfig = {
     ParkDistance = 30.0,
     PanelDistance = 15.0,
     BesideDistance = 5.0,
-    Marker = { type = 2, drawDistance = 25.0, scale = 0.35, color = { 0, 128, 0, 180 } },
+    Marker = { type = 2, drawDistance = 25.0, scale = 0.2, color = { 0, 128, 0, 155 }, height = 1.1 },
     VehicleBlip = {
         enabled = true,
         refreshMs = 5000,
@@ -58,7 +58,7 @@ GarageConfig = {
         caesars24 = {
             label = 'Caesars 24 — Garaj',
             assetType = 'vehicle',
-            spawn = vector4(72.61, 11.72, 68.47, 157.59),
+            spawn = vector4(62.414, 22.274, 69.514, 221.750),
             sprite = 357,
         },
         littleseoul = {
@@ -94,25 +94,25 @@ GarageConfig = {
         themotorhotel = {
             label = 'Motor Hotel — Garaj',
             assetType = 'vehicle',
-            spawn = vector4(1137.56, 2674.19, 38.17, 359.95),
+            spawn = vector4(1123.974, 2658.909, 37.997, 142.235),
             sprite = 357,
         },
         liquorparking = {
             label = 'Grand Senora — Garaj',
             assetType = 'vehicle',
-            spawn = vector4(960.48, 3605.71, 32.98, 87.09),
+            spawn = vector4(888.818, 3654.947, 32.834, 21.629),
             sprite = 357,
         },
         shoreparking = {
             label = 'Sandy Shores — Garaj',
             assetType = 'vehicle',
-            spawn = vector4(1728.65, 3714.85, 34.18, 21.26),
+            spawn = vector4(1713.248, 3767.537, 34.312, 58.875),
             sprite = 357,
         },
         bellfarms = {
             label = 'Paleto Bay — Garaj',
             assetType = 'vehicle',
-            spawn = vector4(70.71, 6425.16, 30.92, 68.5),
+            spawn = vector4(66.417, 6393.496, 31.234, 312.093),
             sprite = 357,
         },
         marina = {
