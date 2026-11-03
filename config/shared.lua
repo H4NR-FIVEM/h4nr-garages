@@ -40,7 +40,7 @@ GarageConfig = {
         motelgarage = {
             label = 'Pink Cage — Garaj',
             assetType = 'vehicle',
-            spawn = vector4(271.26, -342.32, 44.7, 159.97),
+            spawn = vector4(271.410, -332.608, 44.920, 297.937),
             sprite = 357,
         },
         sapcounsel = {
