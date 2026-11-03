@@ -55,9 +55,18 @@ local function findRow(id)
 end
 local MySQL = { query = {}, insert = {}, single = {}, update = {} }
 local keyRows = {}
-function MySQL.query.await(sql)
+function MySQL.query.await(sql, params)
     if sql:find('CREATE TABLE') then
         return {}
+    end
+    if sql:find('WHERE model_key = %?') then
+        local matching = {}
+        for _, row in pairs(rows) do
+            if row.model_key == params[1] then
+                matching[#matching + 1] = copy(row)
+            end
+        end
+        return matching
     end
     if sql:find('h4nr_feather_vehicle_keys') then
         local active = {}
@@ -1045,4 +1054,13 @@ check('the retirement names its trade-in', retireCalls[#retireCalls].referenceId
 check('the key is voided', not activeKey())
 check('a retired car cannot be taken out', call('retrieve', spec, 2).code ~= nil and not call('retrieve', spec, 2).ok)
 check('a retired car is not listed for sale', #api.ListParkedVehicles({ holderId = B }).value.items == 0)
+-- Counting live vehicles of a model ---------------------------------------------
+caller = 'evil'
+check('untrusted resources cannot count', api.CountVehiclesByModel({ modelKey = 't20' }).code == 'forbidden')
+caller = 'h4nr-vehicleshop'
+check('a retired vehicle does not count', api.CountVehiclesByModel({ modelKey = rows[orderId].model_key }).value.count == 0)
+assetsById[assetId].status = 'active'
+check('a live vehicle counts', api.CountVehiclesByModel({ modelKey = rows[orderId].model_key }).value.count == 1)
+assetsById[assetId].status = 'retired'
+check('another model has none', api.CountVehiclesByModel({ modelKey = 'nothing' }).value.count == 0)
 print(('server_spec: %d checks passed'):format(passed))

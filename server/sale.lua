@@ -148,6 +148,28 @@ exports('TransferReservedVehicle', function(request)
         return Garage.Ok({ garage = row.garage })
     end)
 end)
+-- How many live vehicles of a model exist, so a shop can tell whether it may drop that model.
+-- Retired vehicles keep their row, so Assets decides which ones still count.
+exports('CountVehiclesByModel', function(request)
+    if not Trusted(request) or type(request.modelKey) ~= 'string' then
+        return Garage.Err('forbidden')
+    end
+    if not Garage.ready then
+        return Garage.Err('unavailable')
+    end
+    local count = 0
+    for _, row in ipairs(DB.query('SELECT asset_id FROM h4nr_feather_vehicles WHERE model_key = ?', request.modelKey) or {}) do
+        local read = row.asset_id and assets:GetAsset({ assetId = row.asset_id })
+        if not read then
+            count = count + 1
+        elseif not read.ok then
+            return read
+        elseif read.value.status ~= 'retired' then
+            count = count + 1
+        end
+    end
+    return Garage.Ok({ count = count })
+end)
 -- Trade-in: the dealer takes a reserved vehicle off the road for good. The row keeps its
 -- sale_id afterwards, which is what lets a retry after a lost reply prove it is the same sale.
 exports('RetireReservedVehicle', function(request)
