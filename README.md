@@ -84,7 +84,18 @@ exports['h4nr-garages']:TransferReservedVehicle({ saleId = '<uuid>', assetId = '
 - All three calls can be repeated safely. A transfer whose reply was lost finds the buyer already holding the vehicle. `reservation_lost` means the sale no longer holds it.
 - The vehicle stays in the same garage with its properties, damage and fuel.
 
-`GetCapabilities()` returns `{ ok = true, value = { ready, purchaseRegistration = 1, keyItems = 1, vehicleSale = 1 } }`.
+Trade-in, for the same trusted shops, on a vehicle already reserved with `ReserveForSale`:
+
+```lua
+exports['h4nr-garages']:RetireReservedVehicle({ saleId = '<uuid>', assetId = '<uuid>', sellerId = '<uuid>' })
+-- { ok = true, value = true } | { ok = false, code }
+```
+
+- The asset is retired in Assets, which is final, and its key is voided. Its plate stays reserved for ever.
+- The call can be repeated safely. The garage row stays `sale_reserved` with the same `sale_id`, so it can never be taken out and a retry after a lost reply still succeeds.
+- `reservation_lost` means this sale does not hold the vehicle, and nothing was retired.
+
+`GetCapabilities()` returns `{ ok = true, value = { ready, purchaseRegistration = 1, keyItems = 1, vehicleSale = 1, vehicleTradeIn = 1 } }`.
 
 ## Tests
 

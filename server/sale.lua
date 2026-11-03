@@ -148,3 +148,44 @@ exports('TransferReservedVehicle', function(request)
         return Garage.Ok({ garage = row.garage })
     end)
 end)
+-- Trade-in: the dealer takes a reserved vehicle off the road for good. The row keeps its
+-- sale_id afterwards, which is what lets a retry after a lost reply prove it is the same sale.
+exports('RetireReservedVehicle', function(request)
+    if not Trusted(request) or not Valid(request) or not Garage.Uuid(request.sellerId) then
+        return Garage.Err('forbidden')
+    end
+    if not Garage.ready then
+        return Garage.Err('unavailable')
+    end
+    return Garage.Lock(request.assetId, function()
+        local read = assets:GetAsset({ assetId = request.assetId })
+        if not read.ok then
+            return read
+        end
+        local asset, row = read.value, Garage.Row(request.assetId)
+        if not row then
+            return Garage.Err('unavailable')
+        end
+        if row.status ~= 'sale_reserved' or row.sale_id ~= request.saleId then
+            return Garage.Err('reservation_lost')
+        end
+        if asset.status ~= 'retired' then
+            if not (asset.owner and asset.owner.holderId == request.sellerId) then
+                return Garage.Err('forbidden')
+            end
+            local retired = assets:RetireAsset({
+                requestId = ('tradein:%s:%s'):format(request.saleId, asset.revision),
+                assetId = request.assetId,
+                expectedRevision = asset.revision,
+                reasonCode = 'h4nr_garages.trade_in',
+                referenceType = 'h4nr_vehicleshop_tradein',
+                referenceId = request.saleId,
+            })
+            if not retired.ok then
+                return retired
+            end
+        end
+        GarageKeys.Void(request.assetId)
+        return Garage.Ok(true)
+    end)
+end)

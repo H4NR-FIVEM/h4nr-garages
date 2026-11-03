@@ -41,6 +41,7 @@ local A, B = '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-22
 local orderId = '33333333-3333-3333-3333-333333333333'
 local assetId = '44444444-4444-4444-4444-444444444444'
 local rows, assetsById, receipts, claims = {}, {}, {}, {}
+local retireCalls, failRetire, loseRetireReply = {}, nil, false
 local failSaveAsset, failStore, failAssignResponse = false, false, false
 local registerCalls, assigned = 0, 0
 local api, rpc, threads = {}, {}, {}
@@ -255,17 +256,31 @@ function assets:TransferOwnership(p)
     end
     return { ok = true, value = copy(asset) }
 end
+function assets:RetireAsset(p)
+    if failRetire then
+        return { ok = false, code = failRetire }
+    end
+    local asset = assert(assetsById[p.assetId])
+    assert(p.expectedRevision == asset.revision and p.reasonCode == 'h4nr_garages.trade_in')
+    retireCalls[#retireCalls + 1] = p
+    asset.status, asset.owner, asset.revision = 'retired', nil, asset.revision + 1
+    if loseRetireReply then
+        loseRetireReply = false
+        return { ok = false, code = 'unavailable' }
+    end
+    return { ok = true, value = copy(asset) }
+end
 function assets:CheckInterest(p)
     local asset = assetsById[p.assetId]
     return {
         ok = true,
-        value = { matched = asset and asset.owner.holderId == p.holderId, assetStatus = asset and asset.status },
+        value = { matched = asset and asset.owner and asset.owner.holderId == p.holderId, assetStatus = asset and asset.status },
     }
 end
 function assets:ListAssetsByHolder(p)
     local items = {}
     for _, asset in pairs(assetsById) do
-        if asset.owner.holderId == p.holderId then
+        if asset.owner and asset.owner.holderId == p.holderId then
             items[#items + 1] = copy(asset)
         end
     end
@@ -988,4 +1003,31 @@ destroyGuards['h4nr-garages:vehicle-key'] = nil
 eventHandlers.onResourceStart('feather-inventory')
 threads[#threads]()
 check('inventory restart restores the guard', destroyGuards['h4nr-garages:vehicle-key'] ~= nil)
+-- Trade-in: the dealer retires a reserved vehicle --------------------------------
+local tradeId = '88888888-8888-8888-8888-888888888888'
+local trade = { saleId = tradeId, assetId = assetId, sellerId = B }
+local tradeCar = next(entities)
+coords[2], coords[tradeCar] = GarageConfig.Garages.pillboxgarage.coords, GarageConfig.Garages.pillboxgarage.coords
+drivers[tradeCar] = 2
+assert(call('store', storeSpec, 2).ok)
+check('capability advertises trade-in', api.GetCapabilities().value.vehicleTradeIn == 1)
+caller = 'evil'
+check('untrusted resources cannot retire', api.RetireReservedVehicle(trade).code == 'forbidden')
+caller = 'h4nr-vehicleshop'
+check('no retirement without a reservation', api.RetireReservedVehicle(trade).code == 'reservation_lost' and assetsById[assetId].status ~= 'retired')
+assert(api.ReserveForSale(trade).ok)
+check('another sale cannot retire it', api.RetireReservedVehicle({ saleId = otherSale, assetId = assetId, sellerId = B }).code == 'reservation_lost')
+check('only the owner can hand it in', api.RetireReservedVehicle({ saleId = tradeId, assetId = assetId, sellerId = A }).code == 'forbidden')
+failRetire = 'authorization_denied'
+check('a refused retirement keeps the reservation', api.RetireReservedVehicle(trade).code == 'authorization_denied' and rows[orderId].status == 'sale_reserved' and assetsById[assetId].owner.holderId == B)
+failRetire = nil
+loseRetireReply = true
+check('a lost retire reply looks like a failure', not api.RetireReservedVehicle(trade).ok)
+local retiresBefore = #retireCalls
+check('the retry finishes without retiring twice', api.RetireReservedVehicle(trade).ok and #retireCalls == retiresBefore and assetsById[assetId].status == 'retired')
+check('repeating a finished retirement is safe', api.RetireReservedVehicle(trade).ok)
+check('the retirement names its trade-in', retireCalls[#retireCalls].referenceId == tradeId)
+check('the key is voided', not activeKey())
+check('a retired car cannot be taken out', call('retrieve', spec, 2).code ~= nil and not call('retrieve', spec, 2).ok)
+check('a retired car is not listed for sale', #api.ListParkedVehicles({ holderId = B }).value.items == 0)
 print(('server_spec: %d checks passed'):format(passed))
