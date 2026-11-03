@@ -13,7 +13,15 @@ end
 -- A car in streaming range follows its entity. The server's position, read every refreshMs at
 -- the cost of several database reads, only serves cars too far away to be streamed.
 function GarageVehicleBlips.Follow()
+    local current = GetVehiclePedIsIn(PlayerPedId(), false)
+    local inside = current ~= 0 and Entity(current).state.h4nrAssetId
     for assetId, entry in pairs(blips) do
+        -- The player's own arrow marks the car they sit in; the blip is for finding it afterwards.
+        local hidden = inside == assetId
+        if entry.hidden ~= hidden then
+            SetBlipDisplay(entry.handle, hidden and 0 or 2)
+            entry.hidden = hidden
+        end
         if entry.netId and NetworkDoesEntityExistWithNetworkId(entry.netId) then
             local vehicle = NetToVeh(entry.netId)
             -- A network ID can be reused after the car is gone.

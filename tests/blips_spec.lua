@@ -39,6 +39,20 @@ end
 function SetBlipAsShortRange(id, value)
     handles[id].short = value
 end
+function SetBlipDisplay(id, value)
+    handles[id].display = value
+end
+local playerVehicle = 0
+function PlayerPedId()
+    return 1
+end
+function GetVehiclePedIsIn()
+    return playerVehicle
+end
+local entityAsset = 'near'
+function Entity()
+    return { state = { h4nrAssetId = entityAsset } }
+end
 local label
 function BeginTextCommandSetBlipName() end
 function AddTextComponentString(value)
@@ -117,15 +131,12 @@ handle = handles[nextHandle]
 check('holder gets a key blip', handle.color == 5 and handle.label == 'Cheie · LS12 ABC')
 -- Streamed cars follow the entity between server reads.
 GarageVehicleBlips.Clear()
-local streamed, entityCoords, entityAsset = true, { x = 500, y = 600, z = 70 }, 'near'
+local streamed, entityCoords = true, { x = 500, y = 600, z = 70 }
 function NetworkDoesEntityExistWithNetworkId()
     return streamed
 end
 function NetToVeh(netId)
     return netId + 1000
-end
-function Entity()
-    return { state = { h4nrAssetId = entityAsset } }
 end
 function GetEntityCoords()
     return entityCoords
@@ -150,4 +161,29 @@ entityAsset = 'near'
 GarageVehicleBlips.Update({ item('near', 20) })
 GarageVehicleBlips.Follow()
 check('without a network ID the server position stands', handle.coords[1] == 20)
+-- The blip is for finding the car, so it hides while the player sits in that car.
+GarageVehicleBlips.Clear()
+entityAsset = 'near'
+GarageVehicleBlips.Update({ item('near', 1), item('parked', 2) })
+local nearId = nextHandle - 1
+local nearBlip, parkedBlip = handles[nearId], handles[nextHandle]
+check('outside the car its blip shows', nearBlip.display == 2 and parkedBlip.display == 2)
+playerVehicle = 44
+GarageVehicleBlips.Follow()
+check('getting in hides only that car\'s blip', nearBlip.display == 0 and parkedBlip.display == 2)
+GarageVehicleBlips.Update({ item('near', 3), item('parked', 2) })
+check('a server read keeps it hidden and tracked', nearBlip.display == 0 and nearBlip.coords[1] == 3)
+entityAsset = nil
+GarageVehicleBlips.Follow()
+check('another car does not hide it', nearBlip.display == 2)
+entityAsset = 'near'
+GarageVehicleBlips.Follow()
+playerVehicle = 0
+GarageVehicleBlips.Follow()
+check('getting out shows it again', nearBlip.display == 2)
+playerVehicle = 44
+GarageVehicleBlips.Follow()
+GarageVehicleBlips.Update({ item('parked', 2) })
+check('a despawned car loses its blip, even while hidden', removed[nearId] and not handles[nearId] and handles[nextHandle])
+playerVehicle = 0
 print(('blips_spec: %d checks passed'):format(passed))
