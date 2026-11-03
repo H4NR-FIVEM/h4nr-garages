@@ -138,7 +138,7 @@ RegisterNetEvent('h4nr-garages:ready', function(netId, props)
         if not vehicle then
             return Notify('failed')
         end
-        lib.setVehicleProperties(vehicle, props)
+        exports['feather-toolkit']:SetVehicleProperties(vehicle, props)
         if GetResourceState('h4nr-fuel') == 'started' then
             exports['h4nr-fuel']:SetFuel(vehicle, props.fuelLevel or 100)
         end

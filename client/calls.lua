@@ -29,7 +29,9 @@ function GarageCalls.Call(name, params)
     return value
 end
 function GarageCalls.StoreParams(garageId, assetId, vehicle)
-    local props = lib.getVehicleProperties(vehicle)
+    local read = exports['feather-toolkit']:GetVehicleProperties(vehicle)
+    -- Without properties the server refuses the parking, so nothing is lost.
+    local props = read.ok and read.value or {}
     if GetResourceState('h4nr-fuel') == 'started' then
         props.fuelLevel = exports['h4nr-fuel']:GetFuel(vehicle)
     end

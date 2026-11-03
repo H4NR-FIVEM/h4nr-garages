@@ -62,6 +62,7 @@ end
 
 -- Other providers -------------------------------------------------------------
 local notes, hints, rpcCalls, replies = {}, {}, {}, {}
+local restored = {}
 local providers = {
     ['feather-notify'] = {
         ShowNotification = function(spec)
@@ -69,6 +70,13 @@ local providers = {
         end,
     },
     ['feather-toolkit'] = {
+        GetVehicleProperties = function(entity)
+            return { ok = true, value = { fromVehicle = entity } }
+        end,
+        SetVehicleProperties = function(entity, props)
+            restored[#restored + 1] = { entity = entity, props = props }
+            return { ok = true, value = true }
+        end,
         SetControlHints = function(spec)
             hints[#hints + 1] = spec
         end,
@@ -458,9 +466,6 @@ end
 function NetToVeh(netId)
     return netId + 1000
 end
-lib.getVehicleProperties = function(entity)
-    return { fromVehicle = entity }
-end
 replies['h4nr-garages:store'] = { ok = true, value = true }
 local function parkable(extra)
     return vehicle({ model = 'hydra', plate = 'LS56 FEU', available = false, parkNetId = 7, rekey = extra })
@@ -611,4 +616,13 @@ pressed, pressedControl = true, 80
 frame()
 check('at the wheel R parks', rpcCalls[#rpcCalls].name == 'h4nr-garages:store')
 pressed, pressedControl, currentVehicle = false, 38, 0
+-- The car comes out as it was parked, through Toolkit.
+local readyProps = { engineHealth = 300, deformation = { { 1, 2, 0, 0.2 } } }
+function NetworkHasControlOfEntity()
+    return true
+end
+function SetVehicleOnGroundProperly() end
+function SetPedIntoVehicle() end
+netEvents['h4nr-garages:ready'](12, readyProps)
+check('a retrieved car gets its saved properties', restored[#restored].entity == 1012 and restored[#restored].props == readyProps)
 print(('client_spec: %d checks passed'):format(passed))

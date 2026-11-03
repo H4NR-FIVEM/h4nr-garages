@@ -705,7 +705,7 @@ check(
 )
 drivers[entity] = 1
 check('owner starts engine', call('keys', { assetId = assetId, action = 'engine' }).value.running)
-spec.props = { engineHealth = 900, bodyHealth = 800, fuelLevel = 55, color1 = 27, color2 = 0, plate = 'FORGED' }
+spec.props = { deformation = { { 1, 2, 0, 0.2 } }, engineHealth = 900, bodyHealth = 800, fuelLevel = 55, color1 = 27, color2 = 0, plate = 'FORGED' }
 local function listedCar()
     return call('list', { garage = 'pillboxgarage' }).value.items[1]
 end
@@ -737,6 +737,7 @@ coords[1] = GarageConfig.Garages.pillboxgarage.coords
 saved.color1, saved.color2 = { 12, 34, 56 }, 7
 rows[orderId].props_json = json.encode(saved)
 check('parked vehicle retrieves again', call('retrieve', spec).ok and spawnCount == 2)
+check('dents stay out of the spawn state bag', json.decode(rows[orderId].props_json).deformation[1][4] == 0.2 and lastSpawnProps.deformation == nil)
 check('RGB paint stays out of the spawn state bag', lastSpawnProps.color1 == nil and lastSpawnProps.color2 == 7)
 local readyProps = events[#events].args[2]
 check('RGB paint still reaches the driver', events[#events].name == 'h4nr-garages:ready' and readyProps.color1[1] == 12)
