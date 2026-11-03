@@ -22,7 +22,7 @@ GarageConfig = {
         destroyRefused = 'Cheia mașinii nu poate fi aruncată. Parchează mașina sau recuperează cheia la garaj.',
     },
     TrustedShops = { ['h4nr-vehicleshop'] = true, ['h4nr-lootbox'] = true, ['h4nr-plates'] = true },
-    TrustedAccessReaders = { ['h4nr-vehicleinventory'] = true },
+    TrustedAccessReaders = { ['h4nr-vehicleinventory'] = true, ['h4nr-fuel'] = true },
     DefaultGarage = { vehicle = 'pillboxgarage', boat = 'marina', aircraft = 'lsia' },
     Garages = {
         pillboxgarage = {
