@@ -4,9 +4,9 @@ RegisterNetEvent('h4nr-garages:notify', function(key)
     Notify(key)
 end)
 local currentHint
--- parking: E parks instead of opening the list. listToo: H still opens the list.
-local function Hint(garageId, parking, listToo)
-    local key = garageId and ('%s:%s:%s'):format(garageId, parking, listToo)
+-- E opens the list at the garage point; R parks.
+local function Hint(garageId, canOpen, canPark)
+    local key = garageId and ('%s:%s:%s'):format(garageId, canOpen, canPark)
     if key == currentHint then
         return
     end
@@ -15,9 +15,12 @@ local function Hint(garageId, parking, listToo)
         exports['feather-toolkit']:ClearControlHints()
         return
     end
-    local controls = { { key = 'E', label = T(parking and 'store_label' or 'open_label') } }
-    if listToo then
-        controls[2] = { key = 'H', label = T('open_label') }
+    local controls = {}
+    if canOpen then
+        controls[#controls + 1] = { key = 'E', label = T('open_label') }
+    end
+    if canPark then
+        controls[#controls + 1] = { key = 'R', label = T('store_label') }
     end
     exports['feather-toolkit']:SetControlHints({
         tabs = { { title = GarageConfig.Garages[garageId].label, controls = controls } },
@@ -252,14 +255,18 @@ CreateThread(function()
                 if (empty or near and (vehicle == 0 or canPark)) and not menu:IsInputCaptured() then
                     pause = 0
                     shownHint = true
-                    Hint(garageId, vehicle ~= 0 or empty ~= nil, empty ~= nil and near)
-                    if IsControlJustReleased(0, 38) then
+                    local canOpen = vehicle == 0 and near
+                    Hint(garageId, canOpen, vehicle ~= 0 or empty ~= nil)
+                    if canOpen and IsControlJustReleased(0, 38) then
                         Hint(nil)
+                        GaragePanel.Open(garageId)
+                    elseif IsControlJustReleased(0, 45) or IsControlJustReleased(0, 80) then
+                        -- R is 45 on foot and 80 in a vehicle.
                         if empty then
+                            Hint(nil)
                             Park(garageId, emptyAsset, empty)
-                        elseif vehicle == 0 then
-                            GaragePanel.Open(garageId)
-                        else
+                        elseif vehicle ~= 0 then
+                            Hint(nil)
                             local assetId = Entity(vehicle).state.h4nrAssetId
                             if assetId then
                                 Park(garageId, assetId, vehicle)
@@ -267,9 +274,6 @@ CreateThread(function()
                                 Notify('forbidden')
                             end
                         end
-                    elseif empty and near and IsControlJustReleased(0, 74) then
-                        Hint(nil)
-                        GaragePanel.Open(garageId)
                     end
                     break
                 end

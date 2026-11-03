@@ -337,7 +337,7 @@ frame()
 check('over water the arrow stays above the seabed', markers[#markers].z == water.z - 1.5 + GarageConfig.Marker.height)
 ped.coords = pillboxSpawn
 frame()
-check('driver prompt offers E to park', hints[#hints].tabs[1].controls[1].label == T('store_label'))
+check('driver prompt offers R to park', hints[#hints].tabs[1].controls[1].key == 'R' and hints[#hints].tabs[1].controls[1].label == T('store_label'))
 currentVehicle = 0
 ped.coords = GarageConfig.Garages.pillboxgarage.coords
 pressed = true
@@ -541,7 +541,7 @@ replies['h4nr-garages:retrieve'] = { ok = true, value = { netId = 12 } }
 view = open({ stored })
 check('with no old car there is only retrieval', #view.items[1].actions == 1 and view.items[1].actions[1].id == 'retrieve')
 GaragePanel.Close()
--- On foot beside the car: E parks it, H still opens the list.
+-- On foot beside the car: R parks it, E opens the list.
 local function hint()
     return hints[#hints] and hints[#hints].tabs[1].controls or {}
 end
@@ -558,10 +558,10 @@ end
 frame()
 clock = clock + 1000
 frame()
-check('beside your empty car at the point, E parks and H opens the list',
-    hint()[1].key == 'E' and hint()[1].label == T('store_label') and hint()[2].key == 'H' and hint()[2].label == T('open_label'))
+check('beside your empty car at the point, E opens the list and R parks',
+    hint()[1].key == 'E' and hint()[1].label == T('open_label') and hint()[2].key == 'R' and hint()[2].label == T('store_label'))
 before = #rpcCalls
-pressed = true
+pressed, pressedControl = true, 45
 frame()
 local storing
 for index = before + 1, #rpcCalls do
@@ -569,10 +569,10 @@ for index = before + 1, #rpcCalls do
         storing = rpcCalls[index]
     end
 end
-check('E parks the car beside you', storing and storing.params.assetId == id and storing.params.props.fromVehicle == 55)
-pressed, pressedControl = true, 74
+check('R parks the car beside you', storing and storing.params.assetId == id and storing.params.props.fromVehicle == 55)
+pressed, pressedControl = true, 38
 frame()
-check('H opens the list beside the car', focused)
+check('E opens the list beside the car', focused)
 GaragePanel.Close()
 pressedControl = 38
 -- Away from the point, but beside the car and inside the garage's range.
@@ -580,13 +580,11 @@ local point = GarageConfig.Garages.pillboxgarage.coords
 ped.coords = vector3(point.x + 20, point.y, point.z)
 clock = clock + 1000
 frame()
-check('away from the point E still parks, with no list', hint()[1].label == T('store_label') and hint()[2] == nil)
-before = #rpcCalls
-pressedControl = 74
+check('away from the point R still parks, with no list', hint()[1].key == 'R' and hint()[2] == nil)
 pressed = true
 frame()
-check('away from the point H does nothing', not focused)
-pressed, pressedControl = false, 38
+check('away from the point E does nothing', not focused and pressed)
+pressed = false
 allowed = false
 clock = clock + GarageConfig.Key.checkMs + 1000
 frame()
@@ -600,4 +598,17 @@ frame()
 clock = clock + 1000
 frame()
 check('a car with a driver is not offered', hints[#hints] == false)
+-- At the wheel R parks, in the vehicle's own R control, and E no longer does.
+seatTaken, currentVehicle = 1, 77
+vehicleState = { h4nrAssetId = id }
+ped.coords = pillboxSpawn
+before = #rpcCalls
+replies['h4nr-garages:canDrive'] = { ok = true, value = { allowed = true } }
+pressed, pressedControl = true, 38
+frame()
+check('at the wheel E does not park', pressed and #rpcCalls <= before + 1 and rpcCalls[#rpcCalls].name ~= 'h4nr-garages:store')
+pressed, pressedControl = true, 80
+frame()
+check('at the wheel R parks', rpcCalls[#rpcCalls].name == 'h4nr-garages:store')
+pressed, pressedControl, currentVehicle = false, 38, 0
 print(('client_spec: %d checks passed'):format(passed))
