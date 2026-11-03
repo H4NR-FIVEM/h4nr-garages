@@ -97,9 +97,11 @@ exports['h4nr-garages']:RetireReservedVehicle({ saleId = '<uuid>', assetId = '<u
 - The call can be repeated safely. The garage row stays `sale_reserved` with the same `sale_id`, so it can never be taken out and a retry after a lost reply still succeeds.
 - `reservation_lost` means this sale does not hold the vehicle, and nothing was retired.
 
+`ChangeVehiclePlate({ saleId, assetId, ownerId, plate })` gives a vehicle reserved with `ReserveForSale` a new plate, in one commit in Assets. It can be repeated safely. `identifier_taken` means another vehicle holds or once held that plate, and nothing changed. Everything else about the vehicle is stored by asset, and spawning reads the plate from Assets.
+
 `CountVehiclesByModel({ modelKey = 't20' })` returns `{ ok = true, value = { count } }`, the vehicles of a model that are not retired. A shop uses it before dropping a model.
 
-`GetCapabilities()` returns `{ ok = true, value = { ready, purchaseRegistration = 1, keyItems = 1, vehicleSale = 1, vehicleTradeIn = 1 } }`.
+`GetCapabilities()` returns `{ ok = true, value = { ready, purchaseRegistration = 1, keyItems = 1, vehicleSale = 1, vehicleTradeIn = 1, plateChange = 1 } }`.
 
 ## Tests
 

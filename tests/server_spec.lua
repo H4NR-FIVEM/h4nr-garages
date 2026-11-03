@@ -42,6 +42,7 @@ local orderId = '33333333-3333-3333-3333-333333333333'
 local assetId = '44444444-4444-4444-4444-444444444444'
 local rows, assetsById, receipts, claims = {}, {}, {}, {}
 local retireCalls, failRetire, loseRetireReply = {}, nil, false
+local replaceCalls, replaceCode, loseReplaceReply = {}, nil, false
 local failSaveAsset, failStore, failAssignResponse = false, false, false
 local registerCalls, assigned = 0, 0
 local api, rpc, threads = {}, {}, {}
@@ -151,6 +152,9 @@ function MySQL.update.await(sql, p)
             error('injected SQL failure after Asset commit')
         end
         rows[p[2]].asset_id = p[1]
+        return 1
+    elseif sql:find('SET plate = %? WHERE asset_id') then
+        findRow(p[2]).plate = p[1]
         return 1
     elseif sql:find('SET plate') then
         if failStore then
@@ -275,6 +279,21 @@ function assets:RetireAsset(p)
     asset.status, asset.owner, asset.revision = 'retired', nil, asset.revision + 1
     if loseRetireReply then
         loseRetireReply = false
+        return { ok = false, code = 'unavailable' }
+    end
+    return { ok = true, value = copy(asset) }
+end
+function assets:ReplaceAssetIdentifier(p)
+    local asset = assert(assetsById[p.assetId])
+    assert(p.expectedRevision == asset.revision and p.identifierType == 'plate' and p.reasonCode == 'h4nr_garages.plate_change')
+    if replaceCode then
+        return { ok = false, code = replaceCode }
+    end
+    replaceCalls[#replaceCalls + 1] = p
+    asset.identifiers = { plate = p.value }
+    asset.revision = asset.revision + 1
+    if loseReplaceReply then
+        loseReplaceReply = false
         return { ok = false, code = 'unavailable' }
     end
     return { ok = true, value = copy(asset) }
@@ -1027,6 +1046,39 @@ destroyGuards['h4nr-garages:vehicle-key'] = nil
 eventHandlers.onResourceStart('feather-inventory')
 threads[#threads]()
 check('inventory restart restores the guard', destroyGuards['h4nr-garages:vehicle-key'] ~= nil)
+-- Plate change on a reserved vehicle ---------------------------------------------
+local plateId = '99999999-9999-9999-9999-999999999999'
+local plateSale = { saleId = plateId, assetId = assetId, sellerId = B }
+local newPlate = { saleId = plateId, assetId = assetId, ownerId = B, plate = 'BOSS 1' }
+local plateCar = next(entities)
+coords[2], coords[plateCar] = GarageConfig.Garages.pillboxgarage.coords, GarageConfig.Garages.pillboxgarage.coords
+drivers[plateCar] = 2
+assert(call('store', storeSpec, 2).ok)
+local platePropsBefore = rows[orderId].props_json
+check('capability advertises plate changes', api.GetCapabilities().value.plateChange == 1)
+check('h4nr-plates is a trusted shop', GarageConfig.TrustedShops['h4nr-plates'] == true)
+caller = 'evil'
+check('untrusted resources cannot change a plate', api.ChangeVehiclePlate(newPlate).code == 'forbidden')
+caller = 'h4nr-plates'
+check('no change without a reservation', api.ChangeVehiclePlate(newPlate).code == 'reservation_lost' and assetsById[assetId].identifiers.plate ~= 'BOSS 1')
+assert(api.ReserveForSale(plateSale).ok)
+check('another sale cannot change it', api.ChangeVehiclePlate({ saleId = otherSale, assetId = assetId, ownerId = B, plate = 'BOSS 1' }).code == 'reservation_lost')
+check('only the owner can change it', api.ChangeVehiclePlate({ saleId = plateId, assetId = assetId, ownerId = A, plate = 'BOSS 1' }).code == 'forbidden')
+replaceCode = 'identifier_in_use'
+check('a taken plate is reported', api.ChangeVehiclePlate(newPlate).code == 'identifier_taken' and rows[orderId].plate ~= 'BOSS 1')
+replaceCode = nil
+loseReplaceReply = true
+check('a lost reply looks like a failure', not api.ChangeVehiclePlate(newPlate).ok)
+local replacesBefore = #replaceCalls
+local plateDone = api.ChangeVehiclePlate(newPlate)
+check('the retry finishes without replacing twice', plateDone.ok and plateDone.value.plate == 'BOSS 1' and #replaceCalls == replacesBefore)
+check('the garage row follows', rows[orderId].plate == 'BOSS 1')
+check('the properties are untouched', rows[orderId].props_json == platePropsBefore)
+check('the vehicle stays reserved until the shop releases it', rows[orderId].status == 'sale_reserved')
+assert(api.ReleaseSaleReservation({ saleId = plateId, assetId = assetId }).ok)
+coords[2] = GarageConfig.Garages.pillboxgarage.coords
+check('it comes out with the new plate and its props', call('retrieve', spec, 2).ok and instances[activeKey()].metadata.plate == 'BOSS 1')
+caller = 'h4nr-vehicleshop'
 -- Trade-in: the dealer retires a reserved vehicle --------------------------------
 local tradeId = '88888888-8888-8888-8888-888888888888'
 local trade = { saleId = tradeId, assetId = assetId, sellerId = B }

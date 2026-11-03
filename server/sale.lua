@@ -148,6 +148,49 @@ exports('TransferReservedVehicle', function(request)
         return Garage.Ok({ garage = row.garage })
     end)
 end)
+-- A reserved vehicle takes a new plate; everything stored by asset stays where it is. Idempotent:
+-- repeating after a lost reply finds the plate already there. Spawning reads the plate from Assets.
+exports('ChangeVehiclePlate', function(request)
+    if not Trusted(request) or not Valid(request) or not Garage.Uuid(request.ownerId) or type(request.plate) ~= 'string' then
+        return Garage.Err('forbidden')
+    end
+    if not Garage.ready then
+        return Garage.Err('unavailable')
+    end
+    return Garage.Lock(request.assetId, function()
+        local read = assets:GetAsset({ assetId = request.assetId })
+        if not read.ok then
+            return read
+        end
+        local asset, row = read.value, Garage.Row(request.assetId)
+        if not row then
+            return Garage.Err('unavailable')
+        end
+        if not (row.status == 'sale_reserved' and row.sale_id == request.saleId) then
+            return Garage.Err('reservation_lost')
+        end
+        if not (asset.owner and asset.owner.holderId == request.ownerId) then
+            return Garage.Err('forbidden')
+        end
+        if not (asset.identifiers and asset.identifiers.plate == request.plate) then
+            local replaced = assets:ReplaceAssetIdentifier({
+                requestId = ('plate:%s:%s:%s'):format(request.saleId, (request.plate:gsub(' ', '_')), asset.revision),
+                assetId = request.assetId,
+                expectedRevision = asset.revision,
+                identifierType = 'plate',
+                value = request.plate,
+                reasonCode = 'h4nr_garages.plate_change',
+                referenceType = 'h4nr_plates_change',
+                referenceId = request.saleId,
+            })
+            if not replaced.ok then
+                return replaced.code == 'identifier_in_use' and Garage.Err('identifier_taken') or replaced
+            end
+        end
+        DB.exec('UPDATE h4nr_feather_vehicles SET plate = ? WHERE asset_id = ?', request.plate, request.assetId)
+        return Garage.Ok({ plate = request.plate })
+    end)
+end)
 -- How many live vehicles of a model exist, so a shop can tell whether it may drop that model.
 -- Retired vehicles keep their row, so Assets decides which ones still count.
 exports('CountVehiclesByModel', function(request)
