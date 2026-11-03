@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'iseeyoucopy'
 description 'Feather vehicle registration, public garages and owner keys'
-version '2.2.0'
+version '2.3.0'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -13,8 +13,11 @@ shared_scripts {
 }
 
 client_scripts {
+    '@feather-theme/lib/bridge.lua',
     'locale.lua',
     'languages/*.lua',
+    'client/calls.lua',
+    'client/nui.lua',
     'client/main.lua',
     'client/vehicle_blips.lua',
 }
@@ -38,6 +41,10 @@ dependencies {
     'feather-economy',
     'feather-character',
     'feather-menu-v2',
+    'feather-theme',
     'feather-notify',
     'feather-toolkit',
 }
+
+ui_page 'web/index.html'
+files { 'web/index.html', 'web/style.css', 'web/app.js' }

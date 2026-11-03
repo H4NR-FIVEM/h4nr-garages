@@ -1,7 +1,6 @@
--- Client showroom against the real Feather Menu v2 implementation (its Lua side;
--- NUI clicks are sent through its elementAction callback). Natives are stubs.
+-- Client world interaction and the garage panel's Lua side. Natives and the page are stubs;
+-- tests/browser_spec.mjs covers the page itself.
 local root = ROOT
-local menuRoot = root .. '/../../[feather]/feather-menu-v2'
 local passed = 0
 local function check(name, condition)
     if not condition then
@@ -24,47 +23,30 @@ function vector4(x, y, z, w)
     return setmetatable({ x = x, y = y, z = z, w = w }, vmeta)
 end
 
--- Menu v2 provider ------------------------------------------------------------
-local api, nui, events = {}, {}, {}
-local invoking = 'h4nr-garages'
+local nui, events = {}, {}
 function GetCurrentResourceName()
-    return 'feather-menu-v2'
-end
-function GetInvokingResource()
-    return invoking
+    return 'h4nr-garages'
 end
 function GetGameTimer()
     return 0
 end
-function GetResourceMetadata()
-    return 'test'
-end
-exports = function(name, fn)
-    api[name] = fn
-end
 function RegisterNUICallback(name, fn)
     nui[name] = fn
 end
-local stopHandlers = {}
 function AddEventHandler(name, fn)
-    events[name] = fn
-    if name == 'onClientResourceStop' or name == 'onResourceStop' then
-        stopHandlers[#stopHandlers + 1] = fn
-    end
+    events[name] = events[name] or {}
+    table.insert(events[name], fn)
 end
-function SendNUIMessage() end
-function SetNuiFocus() end
+local sent, focused = {}, false
+function SendNUIMessage(message)
+    sent[#sent + 1] = message
+end
+function SetNuiFocus(enabled)
+    focused = enabled
+end
 function SetNuiFocusKeepInput() end
-function CreateThread() end
 function Wait()
     coroutine.yield()
-end
-dofile(menuRoot .. '/client/results.lua')
-dofile(menuRoot .. '/client/validation.lua')
-dofile(menuRoot .. '/client/main.lua')
-nui.ready({}, function() end)
-function GetCurrentResourceName()
-    return 'h4nr-garages'
 end
 
 local backgroundTasks = {}
@@ -102,22 +84,18 @@ local providers = {
             return true
         end,
     },
+    ['feather-menu-v2'] = {
+        IsInputCaptured = function()
+            return false
+        end,
+    },
 }
+local exported = {}
 exports = setmetatable({}, {
     __call = function(_, name, fn)
-        api[name] = fn
+        exported[name] = fn
     end,
     __index = function(_, name)
-        if name == 'feather-menu-v2' then
-            return setmetatable({}, {
-                __index = function(_, method)
-                    assert(api[method], method)
-                    return function(_, ...)
-                        return api[method](...)
-                    end
-                end,
-            })
-        end
         local provider = assert(providers[name], name)
         return setmetatable({}, {
             __index = function(_, method)
@@ -145,7 +123,6 @@ function RegisterNetEvent(name, fn)
 end
 
 -- Natives -----------------------------------------------------------------------
-local classes = { t20 = 7, zentorno = 7, adder = 7, sultanrs = 1, blista = 0 }
 local hashes, names = {}, {}
 function joaat(model)
     local key = model:lower()
@@ -155,142 +132,24 @@ function joaat(model)
     end
     return hashes[key]
 end
-local function modelOf(hash)
-    return names[hash]
-end
--- Only a few models "exist", so categories are predictable; T20..Zentorno are Super.
-local exist = { t20 = true, zentorno = true, adder = true, sultanrs = true, blista = true }
-for i = 1, 14 do
-    exist['super' .. i] = true
-    classes['super' .. i] = 7
-end
-function IsModelInCdimage(hash)
-    return exist[modelOf(hash)] == true
-end
-function IsModelAVehicle()
-    return true
-end
-function GetVehicleClassFromName(hash)
-    return classes[modelOf(hash)] or 0
-end
 function GetDisplayNameFromVehicleModel(hash)
-    return modelOf(hash):upper()
-end
-function GetMakeNameFromVehicleModel()
-    return 'PEGASSI'
+    return names[hash]:upper()
 end
 function GetLabelText(label)
-    return label == 'PEGASSI' and 'Pegassi' or 'NULL'
+    return label == 'T20' and 'T20 Progen' or 'NULL'
 end
-function GetVehicleModelEstimatedMaxSpeed()
-    return 60.0
-end
-function GetVehicleModelAcceleration()
-    return 0.35
-end
-function GetVehicleModelMaxBraking()
-    return 1.0
-end
-function GetVehicleModelMaxTraction()
-    return 2.8
-end
-function GetVehicleModelNumberOfSeats()
-    return 2
-end
-for _, name in ipairs({
-    'IsThisModelABoat',
-    'IsThisModelAJetski',
-    'IsThisModelAHeli',
-    'IsThisModelAPlane',
-    'IsThisModelABike',
-    'IsThisModelABicycle',
-}) do
-    _G[name] = function()
-        return false
-    end
-end
-local ped = { coords = vector3(-33.0, -1103.0, 26.4), visible = true, frozen = false }
+local ped = { coords = vector3(-33.0, -1103.0, 26.4) }
 function PlayerPedId()
     return 1
 end
 function GetEntityCoords()
     return ped.coords
 end
-function GetEntityHeading()
-    return 90.0
-end
-function SetEntityCoords(_, x, y, z)
-    ped.coords = vector3(x, y, z)
-end
-function SetEntityHeading() end
-function FreezeEntityPosition(entity, value)
-    if entity == 1 then
-        ped.frozen = value
-    end
-end
-function SetEntityVisible(_, value)
-    ped.visible = value
-end
-local vehicles, created = {}, {}
-function CreateVehicle(hash)
-    local id = 100 + #created + 1
-    created[#created + 1] = modelOf(hash)
-    vehicles[id] = { model = modelOf(hash) }
-    return id
-end
-function DoesEntityExist(entity)
-    return entity == 1 or vehicles[entity] ~= nil
-end
-function DeleteEntity(entity)
-    vehicles[entity] = nil
-end
-local colours = {}
-function SetVehicleColours(_, a, b)
-    colours[#colours + 1] = { a, b }
-end
-function GetModelDimensions()
-    return vector3(-1, -2.3, -0.6), vector3(1, 2.3, 0.6)
-end
-local camActive = false
-function RenderScriptCams(active)
-    camActive = active
-end
-function IsScreenFadedOut()
-    return true
-end
-function IsScreenFadedIn()
-    return true
-end
-function HasModelLoaded()
-    return true
-end
-function CreateCam()
-    return 9
-end
-for _, name in ipairs({
-    'DoScreenFadeOut',
-    'DoScreenFadeIn',
-    'RequestCollisionAtCoord',
-    'SetEntityInvincible',
-    'SetFocusPosAndVel',
-    'SetCamFov',
-    'SetCamCoord',
-    'PointCamAtCoord',
-    'DisplayRadar',
-    'RequestModel',
-    'SetModelAsNoLongerNeeded',
-    'SetEntityCollision',
-    'SetVehicleOnGroundProperly',
-    'SetVehicleDirtLevel',
-    'SetVehicleNumberPlateText',
-    'SetVehicleLights',
-    'DestroyCam',
-    'ClearFocus',
-}) do
-    _G[name] = function() end
+local dead = false
+function IsEntityDead()
+    return dead
 end
 
--- Garage client against the real Menu v2 provider.
 local commands = {}
 function RegisterCommand(name, fn)
     commands[name] = fn
@@ -356,7 +215,7 @@ replies['h4nr-garages:list'] = {
     ok = true,
     value = {
         items = {
-            { assetId = id, model = 't20', plate = 'LS12 ABC', state = 'stored', available = true },
+            { assetId = id, model = 't20', plate = 'LS12 ABC', state = 'stored', available = true, garage = 'pillboxgarage' },
             { assetId = 'other', model = 'adder', plate = 'LS99 XYZ', state = 'stored', available = false },
         },
     },
@@ -367,31 +226,64 @@ dofile(root .. '/locale.lua')
 dofile(root .. '/languages/ro.lua')
 dofile(root .. '/languages/en_us.lua')
 ped.coords = GarageConfig.Garages.pillboxgarage.coords
-dofile(root .. '/client/main.lua')
-local currentMenu = api.GetHealth().value.activeMenuId
-check('garage opens actual Menu v2', currentMenu ~= nil)
-local state = api.GetMenuState(currentMenu).value
-local page = state.pages[1]
-check('garage label in Romanian', page.elements[1].data.value == 'Pillbox — Garaj')
-local car = page.elements[2]
-check('registered plate shown', car.data.label:find('LS12 ABC', 1, true) ~= nil)
-check('available car enabled', not car.data.disabled)
-check('unavailable car disabled', page.elements[3].data.disabled)
-local response
-nui.elementAction(
-    { menuId = currentMenu, pageId = page.pageId, elementId = car.elementId, event = 'activate' },
-    function(r)
-        response = r
+dofile(root .. '/client/calls.lua')
+dofile(root .. '/client/nui.lua')
+local function reply(fn)
+    local answer
+    fn(function(value)
+        answer = value
+    end)
+    return answer
+end
+local function lastSent(action)
+    for index = #sent, 1, -1 do
+        if sent[index].action == action then
+            return sent[index]
+        end
     end
-)
-check('retrieve button uses real menu callback', response.ok)
+end
+local function row(view, assetId)
+    for _, item in ipairs(view.items) do
+        if item.id == assetId then
+            return item
+        end
+    end
+end
+local function act(assetId, action, method, session)
+    return reply(function(cb)
+        nui.action({ session = session or lastSent('open').session, assetId = assetId, id = action, method = method }, cb)
+    end)
+end
+reply(function(cb)
+    nui.ready({}, cb)
+end)
+dofile(root .. '/client/main.lua')
+check('the panel opens with focus', focused and lastSent('open').label == 'Pillbox — Garaj')
+check('the panel names what kind of place it is', lastSent('open').kind == T('kind_vehicle'))
+local view = lastSent('view')
+local car = row(view, id)
+check('the plate is shown', car.plate == 'LS12 ABC')
+check('the game label replaces the model key', car.name == 'T20 Progen')
+check('a model without a label keeps its key', row(view, 'other').name == 'adder')
+check('a stored car can be retrieved', car.actions[1].id == 'retrieve' and car.group == 'stored')
+check('an unavailable car offers nothing and says so', #row(view, 'other').actions == 0 and row(view, 'other').reason == T('unavailable'))
+check('names are sorted', view.items[1].name == 'T20 Progen')
+check('an action the car does not offer is refused', not act(id, 'park').ok and #rpcCalls == 1)
+check('an unknown car is refused', not act('nobody', 'retrieve').ok and #rpcCalls == 1)
+check('an old page is refused', not act(id, 'retrieve', nil, -1).ok and #rpcCalls == 1)
+replies['h4nr-garages:retrieve'] = { ok = false, code = 'spawn_blocked' }
+local refused = act(id, 'retrieve')
+check('a refusal stays in the panel', not refused.ok and refused.message == T('spawn_blocked') and focused and #notes == 0)
+replies['h4nr-garages:retrieve'] = { ok = true, value = { netId = 12 } }
+local retrieved = act(id, 'retrieve')
+check('the panel closes after retrieval', retrieved.closed and not focused and lastSent('close') ~= nil)
 check(
     'retrieval references asset UUID',
     rpcCalls[#rpcCalls].name == 'h4nr-garages:retrieve'
         and rpcCalls[#rpcCalls].params.assetId == id
         and rpcCalls[#rpcCalls].params.garage == 'pillboxgarage'
 )
-check('successful retrieval releases menu focus', api.GetHealth().value.activeMenuId == nil)
+check('a closed panel accepts nothing', not act(id, 'retrieve').ok)
 check('owner key commands registered', commands.feathervehiclelock and commands.feathervehicleengine)
 check(
     'job-style arrow marks the garage',
@@ -481,44 +373,56 @@ currentVehicle = 0
 vehicleState = {}
 ped.coords = GarageConfig.Garages.pillboxgarage.coords
 frame()
--- Recovery with a new key
-local function openRekey(rekey)
-    replies['h4nr-garages:list'] = {
-        ok = true,
-        value = {
-            rekeyPrice = 2500,
-            items = { { assetId = id, model = 't20', plate = 'LS12 ABC', state = 'out', available = true, rekey = rekey } },
-        },
-    }
+-- Status and actions per situation
+local function open(items, rekeyPrice)
+    GaragePanel.Close()
+    replies['h4nr-garages:list'] = { ok = true, value = { items = items, rekeyPrice = rekeyPrice } }
     pressed = true
     frame()
-    local menuId = api.GetHealth().value.activeMenuId
-    return menuId, api.GetMenuState(menuId).value.pages[1]
+    return lastSent('view'), lastSent('open').session
 end
-local function click(menuId, opened, element)
-    nui.elementAction(
-        { menuId = menuId, pageId = opened.pageId, elementId = element.elementId, event = 'activate' },
-        function() end
-    )
+local function vehicle(extra)
+    local item = { assetId = id, model = 't20', plate = 'LS12 ABC', state = 'out', available = true, garage = 'pillboxgarage' }
+    for key, value in pairs(extra) do
+        item[key] = value
+    end
+    return item
 end
+view = open({ vehicle({ state = 'stored', garage = 'burtongarage', condition = { engine = 90, body = 80, fuel = 55 } }) })
+check('a stored car says where it is', view.items[1].status == T('stored_at'):format('Burton — Garaj'))
+check('the condition reaches the page', view.items[1].condition.fuel == 55)
+view = open({ vehicle({ onStreet = true }) })
+check('a car on the street points to the map', #view.items[1].actions == 0 and view.items[1].reason == T('on_street'))
+view = open({ vehicle({ onStreet = false }) })
+check('a car no longer on the street can come back', view.items[1].actions[1].id == 'retrieve' and view.items[1].status == T('out_lost'))
+view = open({ vehicle({ state = 'sale_reserved' }) })
+check('a reserved car offers nothing', #view.items[1].actions == 0 and view.items[1].status == T('sale_reserved'))
+view = open({ vehicle({ state = 'spawning' }) })
+check('a state in progress has its own text', view.items[1].status == T('working') and #view.items[1].actions == 0)
+-- Recovery with a new key
 replies['h4nr-garages:rekey'] = { ok = true, value = { state = 'waiting', seconds = 600 } }
-local menuId, opened = openRekey({ state = 'none' })
-check('recovery is offered with the plate', opened.elements[3].data.label == T('rekey_request'):format('LS12 ABC'))
-click(menuId, opened, opened.elements[3])
-check('the first press sends no payment method', rpcCalls[#rpcCalls].name == 'h4nr-garages:rekey'
-    and rpcCalls[#rpcCalls].params.assetId == id and rpcCalls[#rpcCalls].params.method == nil)
-check('the first press explains the wait', notes[#notes] == T('rekey_requested'))
-menuId, opened = openRekey({ state = 'waiting', seconds = 61 })
+local session
+view, session = open({ vehicle({ rekey = { state = 'none' } }) }, 2500)
+check('recovery is offered and priced', view.items[1].actions[1].label == T('rekey_request')
+    and view.items[1].reason == T('rekey_explain'):format(2500) and view.items[1].status == T('key_elsewhere'))
+replies['h4nr-garages:list'] = { ok = true, value = { items = { vehicle({ rekey = { state = 'waiting', seconds = 61 } }) } } }
+local first = act(id, 'rekey')
+check('the first press sends no payment method', rpcCalls[#rpcCalls - 1].name == 'h4nr-garages:rekey'
+    and rpcCalls[#rpcCalls - 1].params.assetId == id and rpcCalls[#rpcCalls - 1].params.method == nil)
+check('the first press explains the wait', first.ok and first.message == T('rekey_requested') and focused)
+view = lastSent('view')
 check('the wait rounds up to minutes and cannot be pressed',
-    opened.elements[3].data.label == T('rekey_wait'):format('LS12 ABC', 2) and opened.elements[3].data.disabled)
-api.DestroyMenu(menuId)
-menuId, opened = openRekey({ state = 'ready' })
-check('both payment methods show the price', opened.elements[3].data.label == T('rekey_pay_cash'):format('LS12 ABC', 2500)
-    and opened.elements[4].data.label == T('rekey_pay_bank'):format('LS12 ABC', 2500))
+    view.items[1].actions[1].label == T('rekey_wait'):format(2) and view.items[1].actions[1].disabled)
+check('a disabled action is refused', not act(id, 'rekey').ok)
+view = open({ vehicle({ rekey = { state = 'ready' } }) }, 2500)
+check('both payment methods show the price', view.items[1].actions[1].label == T('rekey_pay_cash'):format(2500)
+    and view.items[1].actions[2].label == T('rekey_pay_bank'):format(2500))
+check('a payment method must be one offered', not act(id, 'rekey', 'crypto').ok)
 replies['h4nr-garages:rekey'] = { ok = true, value = { state = 'done' } }
-click(menuId, opened, opened.elements[4])
-check('paying sends the chosen method', rpcCalls[#rpcCalls].params.method == 'bank')
-check('recovery confirms the result', notes[#notes] == T('rekey_done'))
+local paid = act(id, 'rekey', 'bank')
+check('paying sends the chosen method', rpcCalls[#rpcCalls - 1].params.method == 'bank')
+check('recovery confirms the result', paid.message == T('rekey_done'))
+-- Parking from the panel
 local streamed = true
 function NetworkDoesEntityExistWithNetworkId()
     return streamed
@@ -526,34 +430,56 @@ end
 function NetToVeh(netId)
     return netId + 1000
 end
-lib.getVehicleProperties = function(vehicle)
-    return { fromVehicle = vehicle }
+lib.getVehicleProperties = function(entity)
+    return { fromVehicle = entity }
 end
 replies['h4nr-garages:store'] = { ok = true, value = true }
-local function openParkable()
-    replies['h4nr-garages:list'] = {
-        ok = true,
-        value = {
-            items = {
-                { assetId = id, model = 'hydra', plate = 'LS56 FEU', state = 'out', available = false, parkNetId = 7 },
-            },
-        },
-    }
-    pressed = true
-    frame()
-    local menuId = api.GetHealth().value.activeMenuId
-    return menuId, api.GetMenuState(menuId).value.pages[1]
+local function parkable(extra)
+    return vehicle({ model = 'hydra', plate = 'LS56 FEU', available = false, parkNetId = 7, rekey = extra })
 end
-menuId, opened = openParkable()
-check('a car in range offers parking, even from another garage',
-    opened.elements[2].data.label:find(T('store_label'), 1, true) and not opened.elements[2].data.disabled)
-click(menuId, opened, opened.elements[2])
-check('the menu parks the listed car with its own properties', rpcCalls[#rpcCalls].name == 'h4nr-garages:store'
+view = open({ parkable() })
+check('a car in range offers parking, even from another garage', view.items[1].nearby and view.items[1].actions[1].id == 'park')
+local parked = act(id, 'park')
+check('the panel parks the listed car with its own properties', rpcCalls[#rpcCalls].name == 'h4nr-garages:store'
     and rpcCalls[#rpcCalls].params.assetId == id and rpcCalls[#rpcCalls].params.props.fromVehicle == 1007)
-check('parking from the menu confirms and closes', notes[#notes] == T('parked') and api.GetHealth().value.activeMenuId == nil)
+check('parking confirms and closes', parked.closed and notes[#notes] == T('parked') and not focused)
+view = open({ parkable({ state = 'none' }) })
+check('a car whose key is elsewhere offers recovery, not parking', not view.items[1].nearby and view.items[1].actions[1].id == 'rekey')
 streamed = false
-menuId, opened = openParkable()
+open({ parkable() })
 local callsBefore = #rpcCalls
-click(menuId, opened, opened.elements[2])
-check('a car that left the stream is not parked', #rpcCalls == callsBefore and notes[#notes] == T('too_far'))
+local gone = act(id, 'park')
+check('a car that left the stream is not parked', #rpcCalls == callsBefore and gone.message == T('too_far'))
+-- Paging, and the panel's end of life
+GaragePanel.Close()
+replies['h4nr-garages:list'] = function(params)
+    if params.cursor then
+        return { ok = true, value = { items = { vehicle({ assetId = 'second' }) } } }
+    end
+    return { ok = true, value = { items = { vehicle({}) }, nextCursor = 'next' } }
+end
+pressed = true
+frame()
+check('every page reaches the panel', #lastSent('view').items == 2)
+check('the open panel closes when the player dies', (function()
+    dead = true
+    frame()
+    dead = false
+    return not focused
+end)())
+open({ vehicle({}) })
+ped.coords = vector3(0, 0, 0)
+frame()
+check('the open panel closes when the player is moved away', not focused)
+ped.coords = GarageConfig.Garages.pillboxgarage.coords
+open({ vehicle({}) })
+reply(function(cb)
+    nui.close({}, cb)
+end)
+check('the page can close the panel', not focused)
+open({ vehicle({}) })
+for _, handler in ipairs(events.onClientResourceStop) do
+    handler('h4nr-garages')
+end
+check('stopping the resource releases focus', not focused)
 print(('client_spec: %d checks passed'):format(passed))

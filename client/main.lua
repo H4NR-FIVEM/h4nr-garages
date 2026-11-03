@@ -1,23 +1,5 @@
 local menu = exports['feather-menu-v2']
-local activeMenu, opening = nil, false
-local function Notify(key)
-    local message = T(key)
-    if message == Locales.en_us.failed or message == (Locales[GarageConfig.DefaultLang] or {}).failed then
-        message = message .. ' (' .. tostring(key):sub(1, 64) .. ')'
-    end
-    exports['feather-notify']:ShowNotification({ style = 'right', message = message, duration = 4000 })
-end
-local function Call(name, params)
-    local result, transport = FeatherRPC:CallAsync('h4nr-garages:' .. name, params)
-    if type(result) ~= 'table' or not result.ok then
-        local failure = type(result) == 'table' and result or type(transport) == 'table' and transport or {}
-        local code = failure.code or (type(failure.error) == 'table' and failure.error.code) or 'invalid_response'
-        print(('[h4nr-garages] RPC %s refused: code=%s'):format(name, tostring(code)))
-        Notify(code)
-        return nil
-    end
-    return result.value
-end
+local Notify, Call = GarageCalls.Notify, GarageCalls.Call
 RegisterNetEvent('h4nr-garages:notify', function(key)
     Notify(key)
 end)
@@ -71,142 +53,9 @@ local function Marker(at)
         false
     )
 end
-local function Value(result)
-    if not result.ok then
-        error(result.code)
-    end
-    return result.value
-end
-local function Close()
-    if activeMenu then
-        local previous = activeMenu
-        activeMenu = nil
-        menu:DestroyMenu(previous)
-    end
-end
 local function Park(garageId, assetId, vehicle)
-    local props = lib.getVehicleProperties(vehicle)
-    if GetResourceState('h4nr-fuel') == 'started' then
-        props.fuelLevel = exports['h4nr-fuel']:GetFuel(vehicle)
-    end
-    if Call('store', { garage = garageId, assetId = assetId, props = props }) then
+    if Call('store', GarageCalls.StoreParams(garageId, assetId, vehicle)) then
         Notify('parked')
-        return true
-    end
-    return false
-end
-local function Open(garageId, cursor)
-    if opening then
-        return
-    end
-    opening = true
-    local ok, problem = pcall(function()
-        local ready = menu:AwaitReady(5000)
-        if not ready.ok then
-            Notify('menu_not_ready')
-            return
-        end
-        local data = Call('list', { garage = garageId, cursor = cursor })
-        if not data then
-            return
-        end
-        if type(data) ~= 'table' or type(data.items) ~= 'table' then
-            print('[h4nr-garages] RPC list returned invalid item data')
-            Notify('invalid_response')
-            return
-        end
-        Close()
-        local id = Value(menu:CreateMenu({
-            key = 'h4nr-garages',
-            closable = true,
-            theme = { preset = 'modern' },
-            size = { width = '28rem', maxHeight = '80vh' },
-        })).menuId
-        activeMenu = id
-        local page = Value(menu:CreatePage(id, { key = 'vehicles' })).pageId
-        local elementIndex = 0
-        local function Add(kind, spec, callback)
-            elementIndex = elementIndex + 1
-            spec.key = 'item-' .. elementIndex
-            Value(menu:AddElement(id, page, kind, spec, callback))
-        end
-        Add('header', { value = GarageConfig.Garages[garageId].label, slot = 'header' })
-        for _, item in ipairs(data.items) do
-            local assetId = item.assetId
-            local usable = item.available and (item.state == 'stored' or item.state == 'out')
-            local parkNetId = item.parkNetId
-            Add('button', {
-                label = ('%s · %s · %s'):format(item.model, item.plate or '', T(parkNetId and 'store_label' or item.state)),
-                disabled = not usable and not parkNetId,
-            }, function()
-                CreateThread(function()
-                    local result
-                    if not parkNetId then
-                        result = Call('retrieve', { garage = garageId, assetId = assetId })
-                    elseif NetworkDoesEntityExistWithNetworkId(parkNetId) then
-                        result = Park(garageId, assetId, NetToVeh(parkNetId))
-                    else
-                        Notify('too_far')
-                    end
-                    if result then
-                        Close()
-                    end
-                end)
-            end)
-        end
-        local function RekeyCall(assetId, method)
-            CreateThread(function()
-                local result = Call('rekey', { garage = garageId, assetId = assetId, method = method })
-                if result then
-                    Notify(result.state == 'done' and 'rekey_done' or 'rekey_requested')
-                    Close()
-                end
-            end)
-        end
-        for _, item in ipairs(data.items) do
-            local assetId = item.assetId
-            if item.rekey and item.rekey.state == 'none' then
-                Add('button', { label = T('rekey_request'):format(item.plate or '') }, function()
-                    RekeyCall(assetId)
-                end)
-            elseif item.rekey and item.rekey.state == 'waiting' then
-                Add('button', {
-                    label = T('rekey_wait'):format(item.plate or '', math.ceil(item.rekey.seconds / 60)),
-                    disabled = true,
-                })
-            elseif item.rekey and item.rekey.state == 'ready' then
-                for _, method in ipairs({ 'cash', 'bank' }) do
-                    Add('button', {
-                        label = T('rekey_pay_' .. method):format(item.plate or '', data.rekeyPrice or 0),
-                    }, function()
-                        RekeyCall(assetId, method)
-                    end)
-                end
-            end
-        end
-        if #data.items == 0 then
-            Add('textdisplay', { value = T('unavailable') })
-        end
-        if data.nextCursor then
-            Add('button', { label = T('next') }, function()
-                CreateThread(function()
-                    Open(garageId, data.nextCursor)
-                end)
-            end)
-        end
-        Add('button', { label = T('close'), slot = 'footer' }, Close)
-        Value(menu:RegisterMenuLifecycle(id, function(event)
-            if event.event == 'closed' and activeMenu == id then
-                Close()
-            end
-        end))
-        Value(menu:OpenMenu(id, { pageId = page }))
-    end)
-    opening = false
-    if not ok then
-        print('[h4nr-garages] menu: ' .. tostring(problem))
-        Close()
-        Notify('failed')
     end
 end
 local function Resolve(netId)
@@ -325,7 +174,8 @@ CreateThread(function()
         local pause = 500
         local ped = PlayerPedId()
         local shownHint = false
-        if not activeMenu and not opening and exports['feather-character']:HasActiveCharacter() then
+        GaragePanel.Watch(ped, GetEntityCoords(ped))
+        if not GaragePanel.Busy() and exports['feather-character']:HasActiveCharacter() then
             local coords, vehicle = GetEntityCoords(ped), GetVehiclePedIsIn(ped, false)
             for garageId, garage in pairs(GarageConfig.Garages) do
                 local spawn = vector3(garage.spawn.x, garage.spawn.y, garage.spawn.z)
@@ -346,7 +196,7 @@ CreateThread(function()
                     if IsControlJustReleased(0, 38) then
                         Hint(nil)
                         if vehicle == 0 then
-                            Open(garageId)
+                            GaragePanel.Open(garageId)
                         else
                             local assetId = Entity(vehicle).state.h4nrAssetId
                             if assetId then
@@ -360,7 +210,7 @@ CreateThread(function()
                 end
             end
         end
-        if not shownHint or activeMenu or opening then
+        if not shownHint or GaragePanel.Busy() then
             Hint(nil)
         end
         -- Prevent GTA's automatic engine start while the server says it is off, and keep
@@ -384,8 +234,7 @@ CreateThread(function()
     end
 end)
 AddEventHandler('onClientResourceStop', function(resource)
-    if resource == GetCurrentResourceName() or resource == 'feather-menu-v2' then
+    if resource == GetCurrentResourceName() then
         Hint(nil)
-        Close()
     end
 end)

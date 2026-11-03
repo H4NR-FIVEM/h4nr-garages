@@ -1,6 +1,6 @@
 # h4nr-garages
 
-Public garages for cars, boats and aircraft on the Feather Framework for FiveM. The resource also registers vehicles bought in `h4nr-vehicleshop` and handles physical vehicle keys. Menus use Feather Menu v2 with the `modern` preset (Neon Vice). The default language is Romanian, with `en_us` as fallback.
+Public garages for cars, boats and aircraft on the Feather Framework for FiveM. The resource also registers vehicles bought in `h4nr-vehicleshop` and handles physical vehicle keys. The garage is a dedicated NUI panel in `web/`, approved by the owner, using `feather-theme` tokens and the player's accent (Neon Vice). The default language is Romanian, with `en_us` as fallback.
 
 ## Requirements
 
@@ -24,10 +24,11 @@ ensure h4nr-vehicleshop
 
 - Buy at PDM, the marina or LSIA. The vehicle is delivered to a garage, not to the street.
 - At a garage marker, press **E** to open your list and pick a vehicle to take it out. Any garage of that vehicle type works, wherever the vehicle was parked, at no cost.
+- The panel lists every vehicle of that type with its real name, plate, where it is and, when parked, its engine, body and fuel from the last parking. Search by model or plate, or filter by stored and out. Up and Down move the selection, Enter in the search box runs the main action, Escape closes. The main button follows the selected vehicle, and when nothing can be done the panel says why. Refusals appear in the panel, not as notifications.
 - Taking a vehicle out puts its key in your inventory. It is refused when you have no room for the key.
 - **G** starts or stops the engine; **U** locks or unlocks the nearest car you hold the key for. Both can be rebound in the FiveM key settings.
 - As the driver with the key, press **E** near the spawn point or garage to park. Parking takes the key, wherever it is.
-- On foot, an empty vehicle of yours within `GarageConfig.ParkDistance` (30 m) of the garage marker or spawn point shows **Store vehicle** in the garage list. It works at any garage of that vehicle type and needs the key as well.
+- On foot, an empty vehicle of yours within `GarageConfig.ParkDistance` (30 m) of the garage marker or spawn point appears first in the panel, under **Park near you**, with **Store vehicle** as its action. It works at any garage of that vehicle type and needs the key as well.
 - Parking keeps the GTA vehicle properties, damage and fuel.
 - Your vehicles that are out have a blue "My vehicle · PLATE" blip, even far away. The position refreshes every 5 seconds. The blip goes away when you park, the vehicle despawns, you log out or you lose ownership. Only vehicles from the current session are tracked; test drives are not. When the key is with someone else the blip changes to "My vehicle · PLATE (key given)", and the player carrying it sees "Key · PLATE". Settings: `GarageConfig.VehicleBlip` (`enabled`, `refreshMs`, `sprite`, `color`, `lentColor`, `keyHolderColor`, `scale`).
 

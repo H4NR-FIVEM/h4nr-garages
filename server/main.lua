@@ -137,6 +137,22 @@ local function SpawnProps(props)
     end
     return copy
 end
+-- The state of the last parking, as percentages. A vehicle never parked has none of these.
+local function Condition(encoded)
+    local ok, props = pcall(json.decode, encoded)
+    if not ok or type(props) ~= 'table' then
+        return nil
+    end
+    local function Percent(value, full)
+        return type(value) == 'number' and value == value and math.floor(math.max(0, math.min(value / full, 1)) * 100 + 0.5)
+            or nil
+    end
+    return {
+        engine = Percent(props.engineHealth, 1000),
+        body = Percent(props.bodyHealth, 1000),
+        fuel = Percent(props.fuelLevel, 100),
+    }
+end
 local function List(source, params)
     local garage = AtGarage(source, params.garage)
     local character = Character(source)
@@ -173,6 +189,8 @@ local function List(source, params)
                 plate = asset.identifiers.plate,
                 garage = row.garage,
                 state = row.status,
+                onStreet = vehicle and true or false,
+                condition = row.status == 'stored' and Condition(row.props_json) or nil,
                 available = asset.status == 'active',
                 rekey = asset.status == 'active' and GarageKeys.RekeyState(asset.assetId, character, held) or nil,
             }

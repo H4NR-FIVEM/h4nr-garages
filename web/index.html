@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>H4NR Garages</title>
+  <script src="https://cfx-nui-feather-theme/web/theme.js"></script>
+  <link rel="stylesheet" href="https://cfx-nui-feather-theme/web/tokens.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main id="app" class="panel" hidden role="dialog" aria-modal="true" aria-labelledby="garage-name">
+    <header class="top">
+      <div class="heading"><span id="kind" class="eyebrow"></span><h1 id="garage-name"></h1></div>
+      <button id="close" class="icon-button" type="button"><span aria-hidden="true">×</span></button>
+    </header>
+    <div class="tools">
+      <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" maxlength="40" autocomplete="off" spellcheck="false"></label>
+      <div id="filters" class="filters" role="group"></div>
+    </div>
+    <div id="list" class="list"></div>
+    <footer class="foot">
+      <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+      <p id="reason" class="reason" hidden></p>
+      <div id="actions" class="actions"></div>
+    </footer>
+  </main>
+</body>
+</html>

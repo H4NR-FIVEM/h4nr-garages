@@ -812,10 +812,15 @@ coords[1] = GarageConfig.Garages.marina.coords
 check('a garage of another type refuses the car', call('retrieve', { garage = 'marina', assetId = assetId }).code == 'invalid_garage')
 coords[1] = GarageConfig.Garages.burtongarage.coords
 local elsewhere = { garage = 'burtongarage', assetId = assetId }
-check('another garage offers the parked car', call('list', { garage = 'burtongarage' }).value.items[1].available)
+local offered = call('list', { garage = 'burtongarage' }).value.items[1]
+check('another garage offers the parked car', offered.available and offered.garage == 'pillboxgarage')
+check('a parked car reports the condition it was parked in', offered.condition.engine == 90 and offered.condition.body == 80 and offered.condition.fuel == 55)
+check('a parked car is not on the street', offered.onStreet == false)
 check('another garage hands out the parked car', rows[orderId].garage == 'pillboxgarage' and call('retrieve', elsewhere).ok)
 local burtonCar = next(entities)
 local burtonSpawn = GarageConfig.Garages.burtongarage.spawn
+local outNow = call('list', { garage = 'burtongarage' }).value.items[1]
+check('a car out reports no stale condition and that it is on the street', outNow.condition == nil and outNow.onStreet == true)
 check('the car appears at the garage it was asked from', coords[burtonCar].x == burtonSpawn.x and coords[burtonCar].y == burtonSpawn.y)
 entities[burtonCar] = nil
 coords[1] = GarageConfig.Garages.pillboxgarage.coords
