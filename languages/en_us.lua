@@ -15,6 +15,7 @@ Locales.en_us = {
     invalid_response = 'The garage received an invalid response.',
 
     retrieve = 'Retrieve vehicle',
+    swap = 'Take out and park %s',
     stored = 'Stored',
     out = 'Out',
     sale_reserved = 'Reserved for sale',

@@ -838,7 +838,21 @@ local burtonSpawn = GarageConfig.Garages.burtongarage.spawn
 local outNow = call('list', { garage = 'burtongarage' }).value.items[1]
 check('a car out reports no stale condition and that it is on the street', outNow.condition == nil and outNow.onStreet == true)
 check('the car appears at the garage it was asked from', coords[burtonCar].x == burtonSpawn.x and coords[burtonCar].y == burtonSpawn.y)
-entities[burtonCar] = nil
+-- Parked from beside it, away from the garage point.
+local besideSpec = { garage = 'burtongarage', assetId = assetId,
+    props = { engineHealth = 900, bodyHealth = 800, fuelLevel = 55 } }
+coords[burtonCar] = vector3(burtonSpawn.x + 60, burtonSpawn.y, burtonSpawn.z)
+coords[1] = vector3(burtonSpawn.x + 61, burtonSpawn.y, burtonSpawn.z)
+check('beside a car out of the garage\'s range cannot park', call('store', besideSpec).code == 'forbidden')
+coords[burtonCar] = vector3(burtonSpawn.x + 20, burtonSpawn.y, burtonSpawn.z)
+coords[1] = vector3(burtonSpawn.x + 50, burtonSpawn.y, burtonSpawn.z)
+check('far from both the car and the point cannot park', call('store', besideSpec).code == 'forbidden')
+drivers[burtonCar] = 2
+coords[1] = vector3(burtonSpawn.x + 22, burtonSpawn.y, burtonSpawn.z)
+check('beside a car someone drives cannot park', call('store', besideSpec).code == 'forbidden')
+drivers[burtonCar] = 0
+check('beside an empty car in range parks it', call('store', besideSpec).ok and rows[orderId].status == 'stored' and rows[orderId].garage == 'burtongarage')
+rows[orderId].garage = 'pillboxgarage'
 coords[1] = GarageConfig.Garages.pillboxgarage.coords
 -- A car that vanished: the next retrieval replaces its key.
 check('retrieval after failures works', call('retrieve', spec).ok)

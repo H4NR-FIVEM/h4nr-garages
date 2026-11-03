@@ -4,8 +4,9 @@ RegisterNetEvent('h4nr-garages:notify', function(key)
     Notify(key)
 end)
 local currentHint
-local function Hint(garageId, storing)
-    local key = garageId and (garageId .. (storing and ':store' or ':open'))
+-- parking: E parks instead of opening the list. listToo: H still opens the list.
+local function Hint(garageId, parking, listToo)
+    local key = garageId and ('%s:%s:%s'):format(garageId, parking, listToo)
     if key == currentHint then
         return
     end
@@ -14,13 +15,12 @@ local function Hint(garageId, storing)
         exports['feather-toolkit']:ClearControlHints()
         return
     end
+    local controls = { { key = 'E', label = T(parking and 'store_label' or 'open_label') } }
+    if listToo then
+        controls[2] = { key = 'H', label = T('open_label') }
+    end
     exports['feather-toolkit']:SetControlHints({
-        tabs = {
-            {
-                title = GarageConfig.Garages[garageId].label,
-                controls = { { key = 'E', label = T(storing and 'store_label' or 'open_label') } },
-            },
-        },
+        tabs = { { title = GarageConfig.Garages[garageId].label, controls = controls } },
         activeTab = 1,
     })
 end
@@ -57,6 +57,47 @@ local function Park(garageId, assetId, vehicle)
     if Call('store', GarageCalls.StoreParams(garageId, assetId, vehicle)) then
         Notify('parked')
     end
+end
+-- The empty vehicle the player stands beside, if it is in this garage's range and they hold its
+-- key. Prompts only: the server decides again when parking.
+local beside = { scannedAt = nil, vehicle = nil, assetId = nil, allowed = false, checkedAt = nil, checking = false }
+local function BesideVehicle(coords, garage, spawn)
+    local reach = GarageConfig.ParkDistance + GarageConfig.BesideDistance
+    if #(coords - garage.coords) > reach and #(coords - spawn) > reach then
+        return nil
+    end
+    local now = GetGameTimer()
+    if not beside.scannedAt or now - beside.scannedAt >= 500 then
+        beside.scannedAt = now
+        local candidate = lib.getClosestVehicle(coords, GarageConfig.BesideDistance, false)
+        local assetId = candidate and Entity(candidate).state.h4nrAssetId
+        local empty = assetId and GetPedInVehicleSeat(candidate, -1) == 0
+        if not empty then
+            candidate, assetId = nil, nil
+        end
+        if beside.vehicle ~= candidate then
+            beside.vehicle, beside.assetId, beside.allowed, beside.checkedAt = candidate, assetId, false, nil
+        end
+    end
+    local vehicle, assetId = beside.vehicle, beside.assetId
+    if not vehicle or not DoesEntityExist(vehicle) then
+        return nil
+    end
+    local at = GetEntityCoords(vehicle)
+    if #(at - garage.coords) > GarageConfig.ParkDistance and #(at - spawn) > GarageConfig.ParkDistance then
+        return nil
+    end
+    if not beside.checking and (not beside.checkedAt or now - beside.checkedAt >= GarageConfig.Key.checkMs) then
+        beside.checking, beside.checkedAt = true, now
+        CreateThread(function()
+            local reply = FeatherRPC:CallAsync('h4nr-garages:canDrive', { assetId = assetId })
+            beside.checking = false
+            if beside.vehicle == vehicle then
+                beside.allowed = type(reply) == 'table' and reply.ok == true and reply.value.allowed == true
+            end
+        end)
+    end
+    return beside.allowed and vehicle or nil, assetId
 end
 local function Resolve(netId)
     local deadline = GetGameTimer() + 5000
@@ -189,13 +230,19 @@ CreateThread(function()
                 local canPark = vehicle ~= 0
                     and GetPedInVehicleSeat(vehicle, -1) == ped
                     and Entity(vehicle).state.h4nrAssetId ~= nil
-                if near and (vehicle == 0 or canPark) and not menu:IsInputCaptured() then
+                local empty, emptyAsset
+                if vehicle == 0 then
+                    empty, emptyAsset = BesideVehicle(coords, garage, spawn)
+                end
+                if (empty or near and (vehicle == 0 or canPark)) and not menu:IsInputCaptured() then
                     pause = 0
                     shownHint = true
-                    Hint(garageId, vehicle ~= 0)
+                    Hint(garageId, vehicle ~= 0 or empty ~= nil, empty ~= nil and near)
                     if IsControlJustReleased(0, 38) then
                         Hint(nil)
-                        if vehicle == 0 then
+                        if empty then
+                            Park(garageId, emptyAsset, empty)
+                        elseif vehicle == 0 then
                             GaragePanel.Open(garageId)
                         else
                             local assetId = Entity(vehicle).state.h4nrAssetId
@@ -205,6 +252,9 @@ CreateThread(function()
                                 Notify('forbidden')
                             end
                         end
+                    elseif empty and near and IsControlJustReleased(0, 74) then
+                        Hint(nil)
+                        GaragePanel.Open(garageId)
                     end
                     break
                 end

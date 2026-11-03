@@ -30,8 +30,17 @@ local function Action(id, label, extra)
     action.id, action.label = id, label
     return action
 end
+-- Taking a car out, with the option of parking the one standing in the garage first.
+local function Retrieval(old)
+    local actions = {}
+    if old then
+        actions[1] = Action('swap', T('swap'):format(old.name))
+    end
+    actions[#actions + 1] = Action('retrieve', T('retrieve'))
+    return actions
+end
 -- Status line, why nothing can be done (when so) and the buttons of one vehicle.
-local function Describe(item, price)
+local function Describe(item, price, old)
     if item.rekey then
         if item.rekey.state == 'waiting' then
             local minutes = math.ceil(item.rekey.seconds / 60)
@@ -52,21 +61,37 @@ local function Describe(item, price)
     end
     if item.state == 'stored' then
         local garage = GarageConfig.Garages[item.garage]
-        return garage and T('stored_at'):format(garage.label) or T('stored'), 'ok', nil, { Action('retrieve', T('retrieve')) }
+        return garage and T('stored_at'):format(garage.label) or T('stored'), 'ok', nil, Retrieval(old)
     elseif item.state == 'out' then
         if item.onStreet then
             return T('out'), 'muted', T('on_street'), {}
         end
-        return T('out_lost'), 'warn', nil, { Action('retrieve', T('retrieve')) }
+        return T('out_lost'), 'warn', nil, Retrieval(old)
     elseif item.state == 'sale_reserved' then
         return T('sale_reserved'), 'muted', T('sale_reserved'), {}
     end
     return T('working'), 'muted', T('busy'), {}
 end
-local function View(items, price)
-    local list, byId = {}, {}
+-- The parkable car closest to the spawn point: the one most likely to be in the way.
+local function ClosestParkable(items, garageId)
+    local spawn, best, bestDistance = GarageConfig.Garages[garageId].spawn, nil, nil
+    local point = vector3(spawn.x, spawn.y, spawn.z)
     for _, item in ipairs(items) do
-        local status, tone, reason, actions = Describe(item, price)
+        if item.parkNetId and not item.rekey and NetworkDoesEntityExistWithNetworkId(item.parkNetId) then
+            local distance = #(GetEntityCoords(NetToVeh(item.parkNetId)) - point)
+            if not bestDistance or distance < bestDistance then
+                best, bestDistance = item, distance
+            end
+        end
+    end
+    return best and { assetId = best.assetId, netId = best.parkNetId, name = VehicleName(best.model) } or nil
+end
+local function View(items, price, garageId)
+    local list, byId = {}, {}
+    local old = ClosestParkable(items, garageId)
+    panel.old = old
+    for _, item in ipairs(items) do
+        local status, tone, reason, actions = Describe(item, price, old)
         local group = item.state == 'stored' and 'stored' or 'out'
         list[#list + 1] = {
             id = item.assetId,
@@ -110,7 +135,7 @@ local function Fetch(garageId)
     return items, price
 end
 local function Send(items, price)
-    local list, byId = View(items, price)
+    local list, byId = View(items, price, panel.garage)
     panel.items = byId
     SendNUIMessage({ action = 'view', session = panel.session, items = list })
 end
@@ -179,10 +204,30 @@ function GaragePanel.Watch(ped, coords)
         GaragePanel.Close()
     end
 end
+local function Reload(session, garageId)
+    local items, price = Fetch(garageId)
+    if items and panel and panel.session == session then
+        Send(items, price)
+    end
+end
 local function Run(session, garageId, assetId, entry, action)
     local value, code
     if action.id == 'retrieve' then
         value, code = Request('retrieve', { garage = garageId, assetId = assetId })
+    elseif action.id == 'swap' then
+        local old = panel and panel.old
+        if not old or not NetworkDoesEntityExistWithNetworkId(old.netId) then
+            return { ok = false, message = Message('too_far') }
+        end
+        local stored, refusal = Request('store', GarageCalls.StoreParams(garageId, old.assetId, NetToVeh(old.netId)))
+        if not stored then
+            return { ok = false, message = Message(refusal) }
+        end
+        value, code = Request('retrieve', { garage = garageId, assetId = assetId })
+        -- The old car is parked either way, and the list must say so.
+        if code then
+            Reload(session, garageId)
+        end
     elseif action.id == 'park' then
         local netId = entry.source.parkNetId
         if not NetworkDoesEntityExistWithNetworkId(netId) then
@@ -196,10 +241,7 @@ local function Run(session, garageId, assetId, entry, action)
         value, code = Request('rekey', { garage = garageId, assetId = assetId, method = action.method })
         if value then
             local notice = Message(value.state == 'done' and 'rekey_done' or 'rekey_requested')
-            local items, price = Fetch(garageId)
-            if items and panel and panel.session == session then
-                Send(items, price)
-            end
+            Reload(session, garageId)
             return { ok = true, message = notice }
         end
     end

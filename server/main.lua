@@ -357,8 +357,8 @@ local function Retrieve(source, params)
     end)
 end
 local function Store(source, params)
-    local garage = AtGarage(source, params.garage)
-    if not garage then
+    local garage = GarageConfig.Garages[params.garage]
+    if not garage or GetPlayerRoutingBucket(source) ~= 0 then
         return Garage.Err('forbidden')
     end
     local allowed, refusal = CanOperate(source, params.assetId)
@@ -370,9 +370,14 @@ local function Store(source, params)
         local ped = GetPlayerPed(source)
         local read = assets:GetAsset({ assetId = params.assetId })
         local driver = vehicle and GetPedInVehicleSeat(vehicle, -1)
-        -- Either driven in, or left empty near the garage and parked from its menu.
-        local placed = driver == ped and Near(source, GetEntityCoords(vehicle), 6)
-            or driver == 0 and InParkRange(garage, vehicle)
+        -- Driven in, or left empty near the garage and parked from its panel or from beside it.
+        local placed = driver == ped and Near(source, GetEntityCoords(vehicle), 6) and AtGarage(source, params.garage)
+            or driver == 0
+                and InParkRange(garage, vehicle)
+                and (
+                    AtGarage(source, params.garage)
+                    or Near(source, GetEntityCoords(vehicle), GarageConfig.BesideDistance + 2)
+                )
         if
             not placed
             or not read.ok

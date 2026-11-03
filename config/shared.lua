@@ -1,8 +1,9 @@
 GarageConfig = {
     DefaultLang = 'ro',
-    Distance = 3.0,
+    Distance = 5.0,
     ParkDistance = 30.0,
     PanelDistance = 15.0,
+    BesideDistance = 5.0,
     Marker = { type = 2, drawDistance = 25.0, scale = 0.35, color = { 0, 128, 0, 180 } },
     VehicleBlip = {
         enabled = true,
@@ -27,105 +28,90 @@ GarageConfig = {
         pillboxgarage = {
             label = 'Pillbox — Garaj',
             assetType = 'vehicle',
-            coords = vector3(215.8, -810.1, 30.7),
             spawn = vector4(229.7, -800.1, 30.6, 157.0),
             sprite = 357,
         },
         burtongarage = {
             label = 'Burton — Garaj',
             assetType = 'vehicle',
-            coords = vector3(-372.412, -122.488, 38.683),
             spawn = vector4(-372.412, -122.488, 38.683, 234.850),
             sprite = 357,
         },
         motelgarage = {
             label = 'Pink Cage — Garaj',
             assetType = 'vehicle',
-            coords = vector3(275.58, -344.74, 45.17),
             spawn = vector4(271.26, -342.32, 44.7, 159.97),
             sprite = 357,
         },
         sapcounsel = {
             label = 'San Andreas — Garaj',
             assetType = 'vehicle',
-            coords = vector3(-330.67, -781.12, 33.96),
             spawn = vector4(-337.11, -775.34, 33.56, 132.09),
             sprite = 357,
         },
         spanishave = {
             label = 'Spanish Ave — Garaj',
             assetType = 'vehicle',
-            coords = vector3(-1160.46, -741.04, 19.95),
             spawn = vector4(-1165.38, -747.65, 18.94, 40.45),
             sprite = 357,
         },
         caesars24 = {
             label = 'Caesars 24 — Garaj',
             assetType = 'vehicle',
-            coords = vector3(68.08, 13.15, 69.21),
             spawn = vector4(72.61, 11.72, 68.47, 157.59),
             sprite = 357,
         },
         littleseoul = {
             label = 'Little Seoul — Garaj',
             assetType = 'vehicle',
-            coords = vector3(-463.51, -808.2, 30.54),
             spawn = vector4(-472.24, -813.61, 30.3, 179.88),
             sprite = 357,
         },
         lagunapi = {
             label = 'Laguna — Garaj',
             assetType = 'vehicle',
-            coords = vector3(363.85, 297.97, 103.5),
             spawn = vector4(367.41, 297.02, 103.2, 341.08),
             sprite = 357,
         },
         airportp = {
             label = 'Aeroport — Garaj',
             assetType = 'vehicle',
-            coords = vector3(-796.07, -2023.26, 9.17),
             spawn = vector4(-793.35, -2020.62, 8.51, 58.42),
             sprite = 357,
         },
         beachp = {
             label = 'Plajă — Garaj',
             assetType = 'vehicle',
-            coords = vector3(-1184.21, -1509.65, 4.65),
             spawn = vector4(-1184.4, -1501.88, 4.39, 214.7),
             sprite = 357,
         },
         dumbogarage = {
             label = 'Dumbo — Garaj',
             assetType = 'vehicle',
-            coords = vector3(157.26, -3240.0, 7.0),
             spawn = vector4(165.32, -3236.1, 5.93, 268.5),
             sprite = 357,
         },
         themotorhotel = {
             label = 'Motor Hotel — Garaj',
             assetType = 'vehicle',
-            coords = vector3(1137.77, 2663.54, 37.9),
             spawn = vector4(1137.56, 2674.19, 38.17, 359.95),
             sprite = 357,
         },
         liquorparking = {
             label = 'Grand Senora — Garaj',
             assetType = 'vehicle',
-            coords = vector3(960.68, 3609.32, 32.98),
             spawn = vector4(960.48, 3605.71, 32.98, 87.09),
             sprite = 357,
         },
         shoreparking = {
             label = 'Sandy Shores — Garaj',
             assetType = 'vehicle',
-            coords = vector3(1726.9, 3710.38, 34.26),
             spawn = vector4(1728.65, 3714.85, 34.18, 21.26),
             sprite = 357,
         },
         bellfarms = {
             label = 'Paleto Bay — Garaj',
             assetType = 'vehicle',
-            coords = vector3(78.34, 6418.74, 31.28),
             spawn = vector4(70.71, 6425.16, 30.92, 68.5),
             sprite = 357,
         },
@@ -187,3 +173,8 @@ GarageConfig = {
         },
     },
 }
+-- A car garage has one point: stand there to take a car out, and the car appears there. Boats and
+-- aircraft keep a separate point for the player, who cannot stand on the water or under a plane.
+for _, garage in pairs(GarageConfig.Garages) do
+    garage.coords = garage.coords or vector3(garage.spawn.x, garage.spawn.y, garage.spawn.z)
+end

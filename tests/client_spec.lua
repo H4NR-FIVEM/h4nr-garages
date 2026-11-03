@@ -162,8 +162,12 @@ local currentVehicle = 0
 function GetVehiclePedIsIn()
     return currentVehicle
 end
+local seatTaken = 1
 function GetPedInVehicleSeat()
-    return 1
+    return seatTaken
+end
+function DoesEntityExist()
+    return true
 end
 vehicleState = { h4nrAssetId = '11111111-1111-1111-1111-111111111111', h4nrGarageEngine = true }
 function Entity()
@@ -199,8 +203,11 @@ for _, name in ipairs({
 }) do
     _G[name] = function() end
 end
-local pressed = true
-function IsControlJustReleased()
+local pressed, pressedControl = true, 38
+function IsControlJustReleased(_, control)
+    if control ~= pressedControl then
+        return false
+    end
     local result = pressed
     pressed = false
     return result
@@ -482,4 +489,94 @@ for _, handler in ipairs(events.onClientResourceStop) do
     handler('h4nr-garages')
 end
 check('stopping the resource releases focus', not focused)
+-- Swapping cars: the old one is parked first.
+streamed = true
+local parkedOld = vehicle({ assetId = 'old', model = 'adder', plate = 'LS11 AAA', available = false, parkNetId = 7 })
+local stored = vehicle({ state = 'stored' })
+ped.coords = GarageConfig.Garages.pillboxgarage.coords
+view = open({ parkedOld, stored })
+car = row(view, id)
+check('a stored car offers to park the old one', car.actions[1].id == 'swap' and car.actions[1].label == T('swap'):format('adder'))
+check('a stored car can also come out beside the old one', car.actions[2].id == 'retrieve')
+check('the old car itself does not offer a swap', #row(view, 'old').actions == 1 and row(view, 'old').actions[1].id == 'park')
+local before = #rpcCalls
+replies['h4nr-garages:retrieve'] = { ok = true, value = { netId = 12 } }
+local swapped = act(id, 'swap')
+check('the old car is parked before the new one comes out', rpcCalls[before + 1].name == 'h4nr-garages:store'
+    and rpcCalls[before + 1].params.assetId == 'old' and rpcCalls[before + 2].name == 'h4nr-garages:retrieve'
+    and rpcCalls[before + 2].params.assetId == id)
+check('the swap closes the panel', swapped.closed and not focused)
+open({ parkedOld, stored })
+replies['h4nr-garages:store'] = { ok = false, code = 'key_not_here' }
+before = #rpcCalls
+local kept = act(id, 'swap')
+check('a refused parking takes nothing out', kept.message == T('key_not_here') and #rpcCalls == before + 1 and focused)
+replies['h4nr-garages:store'] = { ok = true, value = true }
+replies['h4nr-garages:retrieve'] = { ok = false, code = 'spawn_blocked' }
+local views = #sent
+local half = act(id, 'swap')
+check('a refused retrieval reports and refreshes the list', half.message == T('spawn_blocked') and #sent > views and focused)
+replies['h4nr-garages:retrieve'] = { ok = true, value = { netId = 12 } }
+view = open({ stored })
+check('with no old car there is only retrieval', #view.items[1].actions == 1 and view.items[1].actions[1].id == 'retrieve')
+GaragePanel.Close()
+-- On foot beside the car: E parks it, H still opens the list.
+local function hint()
+    return hints[#hints] and hints[#hints].tabs[1].controls or {}
+end
+local allowed = true
+replies['h4nr-garages:canDrive'] = function()
+    return { ok = true, value = { allowed = allowed } }
+end
+replies['h4nr-garages:list'] = { ok = true, value = { items = { stored } } }
+seatTaken, clock = 0, clock + 1000
+vehicleState = { h4nrAssetId = id }
+lib.getClosestVehicle = function()
+    return 55
+end
+frame()
+clock = clock + 1000
+frame()
+check('beside your empty car at the point, E parks and H opens the list',
+    hint()[1].key == 'E' and hint()[1].label == T('store_label') and hint()[2].key == 'H' and hint()[2].label == T('open_label'))
+before = #rpcCalls
+pressed = true
+frame()
+local storing
+for index = before + 1, #rpcCalls do
+    if rpcCalls[index].name == 'h4nr-garages:store' then
+        storing = rpcCalls[index]
+    end
+end
+check('E parks the car beside you', storing and storing.params.assetId == id and storing.params.props.fromVehicle == 55)
+pressed, pressedControl = true, 74
+frame()
+check('H opens the list beside the car', focused)
+GaragePanel.Close()
+pressedControl = 38
+-- Away from the point, but beside the car and inside the garage's range.
+local point = GarageConfig.Garages.pillboxgarage.coords
+ped.coords = vector3(point.x + 20, point.y, point.z)
+clock = clock + 1000
+frame()
+check('away from the point E still parks, with no list', hint()[1].label == T('store_label') and hint()[2] == nil)
+before = #rpcCalls
+pressedControl = 74
+pressed = true
+frame()
+check('away from the point H does nothing', not focused)
+pressed, pressedControl = false, 38
+allowed = false
+clock = clock + GarageConfig.Key.checkMs + 1000
+frame()
+clock = clock + 1000
+frame()
+check('without the key no parking is offered', hints[#hints] == false)
+allowed = true
+seatTaken = 1
+clock = clock + GarageConfig.Key.checkMs + 1000
+frame()
+clock = clock + 1000
+frame()
+check('a car with a driver is not offered', hints[#hints] == false)
 print(('client_spec: %d checks passed'):format(passed))

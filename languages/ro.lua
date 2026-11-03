@@ -15,6 +15,7 @@ Locales.ro = {
     invalid_response = 'Garajul a primit un răspuns invalid.',
 
     retrieve = 'Scoate vehiculul',
+    swap = 'Scoate și parchează %s',
     stored = 'Parcat',
     out = 'Scos',
     sale_reserved = 'Rezervat pentru vânzare',
