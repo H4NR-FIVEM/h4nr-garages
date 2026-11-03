@@ -29,6 +29,7 @@ ensure h4nr-vehicleshop
 - **G** starts or stops the engine; **U** locks or unlocks the nearest car you hold the key for. Both can be rebound in the FiveM key settings.
 - As the driver with the key, press **R** near the spawn point or garage to park. Parking takes the key, wherever it is.
 - On foot beside an empty vehicle you hold the key for, within `GarageConfig.ParkDistance` of the garage, press **R** to park it. At the garage point, **E** still opens the list.
+- Only one vehicle comes out of a garage at a time, and only when `GarageConfig.SpawnClearance` around the spawn point is free (6 m for cars, 12 m for boats, 20 m for aircraft). Otherwise the retrieval is refused and nothing changes.
 - Picking another vehicle while one stands in range offers **Take out and park** that one first, as well as plain retrieval. If the parking is refused nothing comes out. If the retrieval is then refused, the old vehicle stays parked. A vehicle farther away is not touched.
 - On foot, an empty vehicle of yours within `GarageConfig.ParkDistance` (30 m) of the garage marker or spawn point appears first in the panel, under **Park near you**, with **Store vehicle** as its action. It works at any garage of that vehicle type and needs the key as well.
 - Parking keeps the GTA vehicle properties, damage, dents and fuel, saved and restored by `feather-toolkit`. Dents come back similar, not identical. An older save loads unchanged and simply has no dents.

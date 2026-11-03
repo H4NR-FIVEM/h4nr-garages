@@ -13,9 +13,9 @@ function Garage.Uuid(value)
         and #value == 36
         and value:match('^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$') ~= nil
 end
-function Garage.Lock(key, fn)
+function Garage.Lock(key, fn, refusal)
     if busy[key] then
-        return Garage.Err('busy')
+        return Garage.Err(refusal or 'busy')
     end
     busy[key] = true
     local ok, result = pcall(fn)

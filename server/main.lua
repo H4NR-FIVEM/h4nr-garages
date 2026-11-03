@@ -268,6 +268,68 @@ local function Locations(source, params)
     end
     return Garage.Ok({ characterId = character, items = items, nextCursor = result.value.nextCursor })
 end
+-- Runs with the garage's spawn point reserved, see Retrieve.
+local function TakeOut(source, params, garage, asset, row)
+    local point = vector3(garage.spawn.x, garage.spawn.y, garage.spawn.z)
+    for _, other in ipairs(GetAllVehicles()) do
+        if #(GetEntityCoords(other) - point) < GarageConfig.SpawnClearance[garage.assetType] then
+            return Garage.Err('spawn_blocked')
+        end
+    end
+    local kind = SpawnType(asset.modelKey, asset.assetType)
+    if not kind then
+        return Garage.Err('spawn_failed')
+    end
+    if not Owns(source, params.assetId) or not AtGarage(source, params.garage) then
+        return Garage.Err('forbidden')
+    end
+    local changed = DB.exec(
+        [[UPDATE h4nr_feather_vehicles SET status = 'spawning'
+        WHERE asset_id = ? AND status = 'stored']],
+        params.assetId
+    )
+    if changed ~= 1 then
+        return Garage.Err('busy')
+    end
+    local issued = GarageKeys.Issue(asset, Character(source))
+    if not issued.ok then
+        DB.exec(
+            "UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status = 'spawning'",
+            params.assetId
+        )
+        return issued
+    end
+    local props = json.decode(row.props_json)
+    props.plate, props.model = asset.identifiers.plate, joaat(asset.modelKey)
+    props.fuelLevel = props.fuelLevel or 100.0
+    local ok, netId, entity = pcall(FeatherVehicles.spawnVehicle, {
+        model = asset.modelKey,
+        type = kind,
+        spawnSource = garage.spawn,
+        props = SpawnProps(props),
+        bucket = 0,
+    })
+    if not ok or not netId then
+        GarageKeys.Void(params.assetId)
+        DB.exec(
+            "UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status = 'spawning'",
+            params.assetId
+        )
+        return Garage.Err('spawn_failed')
+    end
+    live[params.assetId] = entity
+    Entity(entity).state:set('h4nrAssetId', params.assetId, true)
+    Entity(entity).state:set('h4nrGarageEngine', false, true)
+    SetEntityOrphanMode(entity, 2)
+    SetVehicleDoorsLocked(entity, 1)
+    DB.exec("UPDATE h4nr_feather_vehicles SET status = 'out' WHERE asset_id = ?", params.assetId)
+    if not Owns(source, params.assetId) then
+        SetVehicleDoorsLocked(entity, 2)
+        return Garage.Err('forbidden')
+    end
+    TriggerClientEvent('h4nr-garages:ready', source, netId, props)
+    return Garage.Ok({ netId = netId })
+end
 local function Retrieve(source, params)
     local garage = AtGarage(source, params.garage)
     if not garage or not Owns(source, params.assetId) then
@@ -296,64 +358,11 @@ local function Retrieve(source, params)
         if row.status ~= 'stored' then
             return Garage.Err('busy')
         end
-        for _, other in ipairs(GetAllVehicles()) do
-            if #(GetEntityCoords(other) - vector3(garage.spawn.x, garage.spawn.y, garage.spawn.z)) < 4.0 then
-                return Garage.Err('spawn_blocked')
-            end
-        end
-        local kind = SpawnType(asset.modelKey, asset.assetType)
-        if not kind then
-            return Garage.Err('spawn_failed')
-        end
-        if not Owns(source, params.assetId) or not AtGarage(source, params.garage) then
-            return Garage.Err('forbidden')
-        end
-        local changed = DB.exec(
-            [[UPDATE h4nr_feather_vehicles SET status = 'spawning'
-            WHERE asset_id = ? AND status = 'stored']],
-            params.assetId
-        )
-        if changed ~= 1 then
-            return Garage.Err('busy')
-        end
-        local issued = GarageKeys.Issue(asset, Character(source))
-        if not issued.ok then
-            DB.exec(
-                "UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status = 'spawning'",
-                params.assetId
-            )
-            return issued
-        end
-        local props = json.decode(row.props_json)
-        props.plate, props.model = asset.identifiers.plate, joaat(asset.modelKey)
-        props.fuelLevel = props.fuelLevel or 100.0
-        local ok, netId, entity = pcall(FeatherVehicles.spawnVehicle, {
-            model = asset.modelKey,
-            type = kind,
-            spawnSource = garage.spawn,
-            props = SpawnProps(props),
-            bucket = 0,
-        })
-        if not ok or not netId then
-            GarageKeys.Void(params.assetId)
-            DB.exec(
-                "UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status = 'spawning'",
-                params.assetId
-            )
-            return Garage.Err('spawn_failed')
-        end
-        live[params.assetId] = entity
-        Entity(entity).state:set('h4nrAssetId', params.assetId, true)
-        Entity(entity).state:set('h4nrGarageEngine', false, true)
-        SetEntityOrphanMode(entity, 2)
-        SetVehicleDoorsLocked(entity, 1)
-        DB.exec("UPDATE h4nr_feather_vehicles SET status = 'out' WHERE asset_id = ?", params.assetId)
-        if not Owns(source, params.assetId) then
-            SetVehicleDoorsLocked(entity, 2)
-            return Garage.Err('forbidden')
-        end
-        TriggerClientEvent('h4nr-garages:ready', source, netId, props)
-        return Garage.Ok({ netId = netId })
+        -- Taking out yields between the free-space check and the new entity, so two different cars
+        -- could both pass the check. The point stays reserved until this car exists.
+        return Garage.Lock('spawn:' .. params.garage, function()
+            return TakeOut(source, params, garage, asset, row)
+        end, 'spawn_blocked')
     end)
 end
 local function Store(source, params)

@@ -883,6 +883,38 @@ drivers[burtonCar] = 0
 check('beside an empty car in range parks it', call('store', besideSpec).ok and rows[orderId].status == 'stored' and rows[orderId].garage == 'burtongarage')
 rows[orderId].garage = 'pillboxgarage'
 coords[1] = GarageConfig.Garages.pillboxgarage.coords
+-- The spawn point: a different car of another player must not come out on top of this one.
+local otherAsset = '55555555-5555-5555-5555-555555555555'
+rows.otherOrder = copy(rows[orderId])
+rows.otherOrder.asset_id = otherAsset
+assetsById[otherAsset] = copy(assetsById[assetId])
+assetsById[otherAsset].assetId = otherAsset
+assetsById[otherAsset].owner.holderId = B
+local otherSpec = { garage = 'pillboxgarage', assetId = otherAsset }
+local pillboxSpawn = GarageConfig.Garages.pillboxgarage.spawn
+coords[1], coords[2] = GarageConfig.Garages.pillboxgarage.coords, GarageConfig.Garages.pillboxgarage.coords
+entities[999] = true
+coords[999] = vector3(pillboxSpawn.x + 5, pillboxSpawn.y, pillboxSpawn.z)
+check('a car 5 m from the spawn point blocks retrieval', call('retrieve', spec).code == 'spawn_blocked' and rows[orderId].status == 'stored')
+coords[999] = vector3(pillboxSpawn.x + 7, pillboxSpawn.y, pillboxSpawn.z)
+local spawnsAtStart, pausedRetrieval = spawnCount, nil
+FeatherVehicles.spawnVehicle = function(request)
+    coroutine.yield()
+    return originalSpawn(request)
+end
+local pendingSpawn = coroutine.create(function()
+    pausedRetrieval = call('retrieve', spec)
+end)
+assert(coroutine.resume(pendingSpawn))
+check('a second car waits out a retrieval in progress', call('retrieve', otherSpec, 2).code == 'spawn_blocked')
+check('the refused car stays parked with no key', rows.otherOrder.status == 'stored' and spawnCount == spawnsAtStart)
+assert(coroutine.resume(pendingSpawn))
+FeatherVehicles.spawnVehicle = originalSpawn
+check('the first car comes out once', pausedRetrieval.ok and spawnCount == spawnsAtStart + 1)
+check('the second car then finds the place taken', call('retrieve', otherSpec, 2).code == 'spawn_blocked')
+entities[999], coords[999] = nil, nil
+entities[pausedRetrieval.value.netId - 100] = nil
+rows.otherOrder, assetsById[otherAsset] = nil, nil
 -- A car that vanished: the next retrieval replaces its key.
 check('retrieval after failures works', call('retrieve', spec).ok)
 local firstKey = activeKey()
