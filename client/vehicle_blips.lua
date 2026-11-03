@@ -10,6 +10,21 @@ function GarageVehicleBlips.Clear()
     blips = {}
 end
 
+-- A car in streaming range follows its entity. The server's position, read every refreshMs at
+-- the cost of several database reads, only serves cars too far away to be streamed.
+function GarageVehicleBlips.Follow()
+    for assetId, entry in pairs(blips) do
+        if entry.netId and NetworkDoesEntityExistWithNetworkId(entry.netId) then
+            local vehicle = NetToVeh(entry.netId)
+            -- A network ID can be reused after the car is gone.
+            if vehicle ~= 0 and Entity(vehicle).state.h4nrAssetId == assetId then
+                local at = GetEntityCoords(vehicle)
+                SetBlipCoords(entry.handle, at.x, at.y, at.z)
+            end
+        end
+    end
+end
+
 function GarageVehicleBlips.Update(items)
     local seen = {}
     for _, item in ipairs(items) do
@@ -26,6 +41,7 @@ function GarageVehicleBlips.Update(items)
         else
             SetBlipCoords(entry.handle, coords.x, coords.y, coords.z)
         end
+        entry.netId = item.netId
         local color = item.keyHolder and config.keyHolderColor or item.lent and config.lentColor or config.color
         if entry.color ~= color then
             SetBlipColour(entry.handle, color)
@@ -50,6 +66,7 @@ function GarageVehicleBlips.Update(items)
             blips[assetId] = nil
         end
     end
+    GarageVehicleBlips.Follow()
 end
 
 function GarageVehicleBlips.Refresh()
@@ -91,6 +108,13 @@ CreateThread(function()
     while true do
         GarageVehicleBlips.Refresh()
         Wait(math.max(1000, config.refreshMs))
+    end
+end)
+
+CreateThread(function()
+    while true do
+        GarageVehicleBlips.Follow()
+        Wait(next(blips) and config.followMs or 1000)
     end
 end)
 

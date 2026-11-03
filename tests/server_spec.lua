@@ -657,6 +657,7 @@ check(
     'owner receives car coordinates from anywhere',
     location and location.assetId == assetId and location.coords.x == coords[entity].x and location.plate == 'LS99 XYZ'
 )
+check('a location names the entity for following it', location.netId == NetworkGetNetworkIdFromEntity(entity))
 check('another player cannot query owner locations', #call('locations', { holderId = A }, 2).value.items == 0)
 entityBuckets[entity] = 7
 check('locations do not cross private sessions', #call('locations', {}).value.items == 0)

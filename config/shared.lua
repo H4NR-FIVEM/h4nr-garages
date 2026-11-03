@@ -7,6 +7,7 @@ GarageConfig = {
     VehicleBlip = {
         enabled = true,
         refreshMs = 5000,
+        followMs = 250,
         sprite = 225,
         color = 3,
         lentColor = 47,

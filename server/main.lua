@@ -239,6 +239,7 @@ local function Locations(source, params)
                 assetId = asset.assetId,
                 plate = asset.identifiers and asset.identifiers.plate,
                 coords = { x = at.x, y = at.y, z = at.z },
+                netId = NetworkGetNetworkIdFromEntity(vehicle),
                 lent = GarageKeys.IsLent(asset.assetId, character, held),
             }
         end
@@ -256,6 +257,7 @@ local function Locations(source, params)
                     assetId = assetId,
                     plate = asset.identifiers and asset.identifiers.plate,
                     coords = { x = at.x, y = at.y, z = at.z },
+                    netId = NetworkGetNetworkIdFromEntity(vehicle),
                     keyHolder = true,
                 }
             end

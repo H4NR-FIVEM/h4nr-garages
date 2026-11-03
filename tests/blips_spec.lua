@@ -4,7 +4,7 @@ local function check(name, condition)
     passed = passed + 1
 end
 GarageConfig =
-    { DefaultLang = 'ro', VehicleBlip = { enabled = true, refreshMs = 5000, sprite = 225, color = 3, lentColor = 47, keyHolderColor = 5, scale = 0.75 } }
+    { DefaultLang = 'ro', VehicleBlip = { enabled = true, refreshMs = 5000, followMs = 250, sprite = 225, color = 3, lentColor = 47, keyHolderColor = 5, scale = 0.75 } }
 local activeCharacter, handles, nextHandle, removed, threads, events = true, {}, 0, {}, {}, {}
 function CreateThread(fn)
     threads[#threads + 1] = fn
@@ -115,4 +115,39 @@ held.keyHolder = true
 GarageVehicleBlips.Update({ held })
 handle = handles[nextHandle]
 check('holder gets a key blip', handle.color == 5 and handle.label == 'Cheie · LS12 ABC')
+-- Streamed cars follow the entity between server reads.
+GarageVehicleBlips.Clear()
+local streamed, entityCoords, entityAsset = true, { x = 500, y = 600, z = 70 }, 'near'
+function NetworkDoesEntityExistWithNetworkId()
+    return streamed
+end
+function NetToVeh(netId)
+    return netId + 1000
+end
+function Entity()
+    return { state = { h4nrAssetId = entityAsset } }
+end
+function GetEntityCoords()
+    return entityCoords
+end
+local near = item('near', 10)
+near.netId = 7
+GarageVehicleBlips.Update({ near })
+handle = handles[nextHandle]
+check('a streamed car replaces the older server position at once', handle.coords[1] == 500)
+entityCoords = { x = 900, y = 600, z = 70 }
+GarageVehicleBlips.Follow()
+check('a streamed car moves between server reads', handle.coords[1] == 900)
+streamed = false
+GarageVehicleBlips.Follow()
+check('a car out of range keeps its last position', handle.coords[1] == 900)
+GarageVehicleBlips.Update({ near })
+check('a car out of range uses the server position', handle.coords[1] == 10)
+streamed, entityAsset = true, 'someone else'
+GarageVehicleBlips.Follow()
+check('a reused network ID is not followed', handle.coords[1] == 10)
+entityAsset = 'near'
+GarageVehicleBlips.Update({ item('near', 20) })
+GarageVehicleBlips.Follow()
+check('without a network ID the server position stands', handle.coords[1] == 20)
 print(('blips_spec: %d checks passed'):format(passed))
