@@ -807,6 +807,18 @@ end
 check('failed spawn refuses retrieval', call('retrieve', spec).code == 'spawn_failed')
 check('failed spawn takes the key back', not activeKey() and next(instances) == nil)
 FeatherVehicles.spawnVehicle = originalSpawn
+-- Any garage of the vehicle's type hands it out, wherever it was parked.
+coords[1] = GarageConfig.Garages.marina.coords
+check('a garage of another type refuses the car', call('retrieve', { garage = 'marina', assetId = assetId }).code == 'invalid_garage')
+coords[1] = GarageConfig.Garages.burtongarage.coords
+local elsewhere = { garage = 'burtongarage', assetId = assetId }
+check('another garage offers the parked car', call('list', { garage = 'burtongarage' }).value.items[1].available)
+check('another garage hands out the parked car', rows[orderId].garage == 'pillboxgarage' and call('retrieve', elsewhere).ok)
+local burtonCar = next(entities)
+local burtonSpawn = GarageConfig.Garages.burtongarage.spawn
+check('the car appears at the garage it was asked from', coords[burtonCar].x == burtonSpawn.x and coords[burtonCar].y == burtonSpawn.y)
+entities[burtonCar] = nil
+coords[1] = GarageConfig.Garages.pillboxgarage.coords
 -- A car that vanished: the next retrieval replaces its key.
 check('retrieval after failures works', call('retrieve', spec).ok)
 local firstKey = activeKey()

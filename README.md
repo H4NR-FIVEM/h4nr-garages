@@ -23,7 +23,7 @@ ensure h4nr-vehicleshop
 ## In game
 
 - Buy at PDM, the marina or LSIA. The vehicle is delivered to a garage, not to the street.
-- At a garage marker, press **E** to open your list and pick a vehicle to take it out.
+- At a garage marker, press **E** to open your list and pick a vehicle to take it out. Any garage of that vehicle type works, wherever the vehicle was parked, at no cost.
 - Taking a vehicle out puts its key in your inventory. It is refused when you have no room for the key.
 - **G** starts or stops the engine; **U** locks or unlocks the nearest car you hold the key for. Both can be rebound in the FiveM key settings.
 - As the driver with the key, press **E** near the spawn point or garage to park. Parking takes the key, wherever it is.

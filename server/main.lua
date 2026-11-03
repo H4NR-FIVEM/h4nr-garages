@@ -173,7 +173,7 @@ local function List(source, params)
                 plate = asset.identifiers.plate,
                 garage = row.garage,
                 state = row.status,
-                available = asset.status == 'active' and row.garage == params.garage,
+                available = asset.status == 'active',
                 rekey = asset.status == 'active' and GarageKeys.RekeyState(asset.assetId, character, held) or nil,
             }
         end
@@ -260,7 +260,7 @@ local function Retrieve(source, params)
             return Garage.Err('unavailable')
         end
         local asset = read.value
-        if row.garage ~= params.garage or asset.assetType ~= garage.assetType then
+        if asset.assetType ~= garage.assetType then
             return Garage.Err('invalid_garage')
         end
         if Vehicle(params.assetId) then
