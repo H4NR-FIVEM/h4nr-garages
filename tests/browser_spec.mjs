@@ -127,8 +127,35 @@ try {
   await send({ action: 'view', session: 9, items });
   check(await page.locator('.empty').innerText() === texts.no_vehicles, 'a view of another session is ignored');
 
+  // Slots and premium offers.
+  check(await page.locator('#slots').isHidden(), 'no slot strip without slots');
+  await send({ action: 'open', session: 1, label: 'Pillbox — Garaj', kind: 'Garaj', texts: { ...texts, slots_premium: 'Premium', slot_confirm: 'Confirmă plata' } });
+  const slots = {
+    meters: [{ label: 'Scoase', used: 3, limit: 3 }, { label: 'Locuri în garaj', used: 4, limit: 5 }],
+    offers: [{ id: 'out', label: '+1 loc scos · 500 Tokens' }, { id: 'owned', label: '+1 loc în garaj · 300 Tokens' }],
+  };
+  await send({ action: 'view', session: 1, items, slots });
+  check(await page.locator('#slots').isVisible(), 'the slot strip is shown');
+  check((await page.locator('.meter em').allInnerTexts()).join() === '3/3,4/5', 'meters show used and limit');
+  check(await page.locator('.meter.full').count() === 1, 'a full meter is marked');
+  check(await fits('.offer span') && await fits('.meter'), 'offers and meters fit');
+  const slotPosts = posts.filter((post) => post.name === 'slot').length;
+  await page.locator('.offer').first().click();
+  check((await page.locator('.offer').first().innerText()).includes('Confirmă plata'), 'the first click asks for confirmation');
+  check(posts.filter((post) => post.name === 'slot').length === slotPosts, 'nothing is bought on the first click');
+  await shot('slots-720');
+  await page.locator('.offer').first().click();
+  await page.waitForFunction(() => document.querySelector('.offer:not(:disabled)'));
+  assert.deepEqual(last('slot').body, { session: 1, id: 'out' });
+  checks += 1;
+  check(!(await page.locator('.offer').first().innerText()).includes('Confirmă'), 'the confirmation is cleared after paying');
+  await page.locator('.offer').nth(1).click();
+  await page.locator('.row', { hasText: 'T20' }).click();
+  check(!(await page.locator('.offer').nth(1).innerText()).includes('Confirmă'), 'selecting a car cancels a pending confirmation');
+
   // Keyboard.
   await open();
+  check(await page.locator('#slots').isHidden(), 'a new panel starts without slots');
   await page.keyboard.press('ArrowDown');
   check(await selectedName() !== 'Adder', 'arrow down moves the selection');
   await page.keyboard.press('ArrowUp');

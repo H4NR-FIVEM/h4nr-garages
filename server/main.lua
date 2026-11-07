@@ -196,7 +196,14 @@ local function List(source, params)
             }
         end
     end
-    return Garage.Ok({ items = items, nextCursor = result.value.nextCursor, rekeyPrice = GarageConfig.Rekey.price })
+    -- Slots go with the first page only: the panel reads them once per refresh.
+    local slots = not params.cursor and GarageSlots.Snapshot(character, garage.assetType, Vehicle) or nil
+    return Garage.Ok({
+        items = items,
+        nextCursor = result.value.nextCursor,
+        rekeyPrice = GarageConfig.Rekey.price,
+        slots = slots and slots.limited and slots or nil,
+    })
 end
 -- Coordinates are resolved server-side from current ownership, even when the
 -- entity is outside the owner's streaming range. No arbitrary holder is accepted.
@@ -357,6 +364,15 @@ local function Retrieve(source, params)
         end
         if row.status ~= 'stored' then
             return Garage.Err('busy')
+        end
+        -- One request per player at a time (playersBusy), and only the owner takes a car out,
+        -- so the count cannot change between this check and the new entity.
+        local slots = GarageSlots.Snapshot(Character(source), asset.assetType, Vehicle)
+        if not slots then
+            return Garage.Err('unavailable')
+        end
+        if slots.limited and slots.out >= slots.outLimit then
+            return Garage.Err('out_limit')
         end
         -- Taking out yields between the free-space check and the new entity, so two different cars
         -- could both pass the check. The point stays reserved until this car exists.
@@ -530,6 +546,35 @@ local function Rekey(source, params)
         return Garage.Ok({ state = 'done' })
     end)
 end
+local function BuySlot(source, params)
+    local character = Character(source)
+    local garage = AtGarage(source, params.garage)
+    if not garage or not character then
+        return Garage.Err('too_far')
+    end
+    if not GarageConfig.Slots.limits[garage.assetType] then
+        return Garage.Err('invalid_input')
+    end
+    return GarageSlots.Buy(source, character, params.kind)
+end
+-- For trusted shops, before any money moves: may this character receive one more vehicle?
+exports('GetVehicleSlots', function(request)
+    if not GarageConfig.TrustedShops[GetInvokingResource()] or type(request) ~= 'table' then
+        return Garage.Err('forbidden')
+    end
+    if not Garage.ready then
+        return Garage.Err('unavailable')
+    end
+    if not Garage.Uuid(request.holderId) or type(request.assetType) ~= 'string' then
+        return Garage.Err('invalid_input')
+    end
+    local slots = GarageSlots.Snapshot(request.holderId, request.assetType, Vehicle)
+    if not slots then
+        return Garage.Err('unavailable')
+    end
+    slots.canReceive = not slots.limited or slots.owned < slots.ownedLimit
+    return Garage.Ok(slots)
+end)
 -- Read by the driver's client: whoever sits at the wheel needs the key, whatever the engine state.
 local function CanDrive(source, params)
     local allowed = CanOperate(source, params.assetId)
@@ -543,6 +588,7 @@ for name, handler in pairs({
     store = Store,
     keys = Keys,
     rekey = Rekey,
+    buySlot = BuySlot,
 }) do
     local operation = handler
     local mutating = name ~= 'list' and name ~= 'locations' and name ~= 'canDrive'
@@ -577,6 +623,7 @@ CreateThread(function()
     local ok, problem = pcall(function()
         Garage.Migrate()
         GarageKeys.Migrate()
+        GarageSlots.Migrate()
         local ready = assets:AwaitReady(30000)
         assert(ready.ok, ready.code)
         local inventoryReady = exports['feather-inventory']:AwaitReady(30000)

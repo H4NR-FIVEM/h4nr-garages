@@ -37,6 +37,20 @@ ensure h4nr-vehicleshop
 
 Default locations: Pillbox for cars, Puerto del Sol for boats and LSIA for aircraft. Public access is in routing bucket 0. Taking a vehicle out is refused when the spot is blocked, the asset is not active or the vehicle is already out.
 
+## Vehicle slots
+
+Per character, from `GarageConfig.Slots`: by default at most **3 cars out** at once and **5 cars**
+held. Boats and aircraft have no limit. The garage panel shows both meters and sells extra slots for
+the premium currency (`tokens`); the purchase needs a confirming second click. Shops ask
+`GetVehicleSlots` before charging, so a full garage refuses a purchase or a sale without taking
+money. Staff grant slots from the server console:
+
+```
+garageslots <characterId> <out|owned> <amount>
+```
+
+The amount replaces the granted extra; bought slots are kept separately.
+
 ## Vehicle keys
 
 The physical key decides who may use a vehicle. Whoever has the `vehicle_key` item in their personal inventory can lock, start and park the car; the owner without it cannot, and sees "You do not have the key". A key in a trunk, a stash or on the ground works for nobody until someone picks it up.

@@ -17,11 +17,12 @@ local function ReadyReasons()
     reasonsReady = Ok(result)
     return reasonsReady
 end
-local function Account(characterId, method)
+local function Account(characterId, method, currency)
+    currency = currency or 'dollars'
     local function Select(accounts)
         for _, row in ipairs(accounts or {}) do
             if
-                row.currency == 'dollars'
+                row.currency == currency
                 and row.status == 'open'
                 and row.accountType == (method == 'bank' and 'bank' or 'wallet')
                 and (method ~= 'bank' or row.accountRef == 'h4nr')
@@ -68,6 +69,31 @@ function GaragePayments.Charge(spec)
     end
     local code = type(result) == 'table' and result.code or 'unavailable'
     return Garage.Err(code == 'insufficient_funds' and 'no_money' or 'unavailable')
+end
+-- Premium currency, whole units, from the character's wallet (a v1 movement, no operated reason).
+-- spec: characterId, source, amount, referenceId, key.
+function GaragePayments.ChargePremium(spec)
+    local currency = GarageConfig.Slots.premium.currency
+    local account = Account(spec.characterId, 'cash', currency)
+    local sink = economy:GetSystemAccount({ currency = currency, accountType = 'system_sink' })
+    if not account or not Ok(sink) then
+        return Garage.Err('unavailable')
+    end
+    local result = economy:Transfer({
+        fromAccountId = account.accountId,
+        toAccountId = sink.value.accountId,
+        currency = currency,
+        amount = spec.amount,
+        reasonCode = 'h4nr_garages.slot_purchase',
+        referenceType = 'h4nr_garages_slots',
+        referenceId = spec.referenceId,
+        idempotencyKey = spec.key,
+    }, { actorCharacterId = spec.characterId, actorSource = spec.source, correlationId = spec.referenceId })
+    if Ok(result) then
+        return Garage.Ok(true)
+    end
+    local code = type(result) == 'table' and result.code or 'unavailable'
+    return Garage.Err(code == 'insufficient_funds' and 'no_premium' or 'unavailable')
 end
 -- Economy keeps operated reasons in memory: register again after it restarts.
 AddEventHandler('onResourceStart', function(resource)

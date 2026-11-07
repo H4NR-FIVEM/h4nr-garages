@@ -6,6 +6,8 @@
   const post = (name, body) => fetch(`https://${resource}/${name}`, { method: 'POST', body: JSON.stringify(body || {}) })
     .then((response) => response.json());
   let session = null, texts = {}, items = [], selected = null, filter = 'all', query = '', busy = false;
+  // Slot meters and premium offers; `armed` is the offer waiting for its confirming click.
+  let slots = null, armed = null;
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -112,13 +114,60 @@
       host.append(button);
     });
   }
+  function meter(entry) {
+    const full = entry.used >= entry.limit;
+    const element = node('div', `meter${full ? ' full' : ''}`);
+    const head = node('span', 'bar-head');
+    head.append(node('b', '', entry.label), node('em', '', `${entry.used}/${entry.limit}`));
+    const track = node('span', 'track');
+    const fill = node('i');
+    fill.style.width = `${entry.limit > 0 ? Math.min(100, Math.round(entry.used / entry.limit * 100)) : 100}%`;
+    track.append(fill);
+    element.append(head, track);
+    return element;
+  }
+  function renderSlots() {
+    const host = $('slots');
+    host.hidden = !slots;
+    if (!slots) return;
+    $('meters').replaceChildren(...(slots.meters || []).map(meter));
+    const offers = $('offers');
+    offers.replaceChildren();
+    for (const offer of slots.offers || []) {
+      const button = node('button', `offer${armed === offer.id ? ' armed' : ''}`);
+      button.type = 'button';
+      button.disabled = busy;
+      button.append(node('span', 'offer-tag', texts.slots_premium), node('span', '', armed === offer.id ? texts.slot_confirm : offer.label));
+      button.addEventListener('click', () => buySlot(offer));
+      offers.append(button);
+    }
+  }
+  async function buySlot(offer) {
+    if (busy) return;
+    if (armed !== offer.id) { armed = offer.id; showNotice(''); renderSlots(); return; }
+    armed = null;
+    const active = session;
+    setBusy(true);
+    showNotice('');
+    let result = null;
+    try {
+      result = await post('slot', { session: active, id: offer.id });
+    } catch {
+      result = null;
+    }
+    if (session !== active) { busy = false; return; }
+    setBusy(false);
+    showNotice(result && result.message || '', Boolean(result && result.ok));
+  }
   function render(keepFocus) {
+    renderSlots();
     renderFilters();
     renderList(keepFocus);
     renderFoot();
   }
   function select(id) {
     selected = id;
+    armed = null;
     showNotice('');
     render(true);
   }
@@ -130,6 +179,7 @@
   }
   function setBusy(value) {
     busy = value;
+    renderSlots();
     renderFoot();
   }
   async function run(item, action) {
@@ -178,7 +228,7 @@
       session = data.session;
       texts = data.texts || {};
       items = [];
-      selected = null; filter = 'all'; query = ''; busy = false;
+      selected = null; filter = 'all'; query = ''; busy = false; slots = null; armed = null;
       $('kind').textContent = data.kind || '';
       $('garage-name').textContent = data.label || '';
       $('search').value = '';
@@ -189,11 +239,13 @@
       $('search').focus();
     } else if (data.action === 'view' && data.session === session) {
       items = Array.isArray(data.items) ? data.items : [];
+      slots = data.slots && typeof data.slots === 'object' ? data.slots : null;
       settleSelection();
       render();
     } else if (data.action === 'close') {
       session = null;
       items = [];
+      slots = null; armed = null;
       $('app').hidden = true;
       if (document.activeElement) document.activeElement.blur();
     }

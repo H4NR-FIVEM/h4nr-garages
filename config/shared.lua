@@ -18,6 +18,18 @@ GarageConfig = {
         scale = 0.75,
     },
     Rekey = { price = 2500, waitSeconds = 600 },
+    -- Per character. `out`: vehicles on the street at once. `owned`: vehicles held in total.
+    -- A type left out of `limits` (boats, aircraft) has no limit. Purchases and sales check
+    -- `owned` before any money moves; prizes and staff grants are never refused.
+    Slots = {
+        limits = { vehicle = { out = 3, owned = 5 } },
+        -- Extra slots, bought at the garage with the premium currency. `max` caps the bought ones.
+        premium = {
+            currency = 'tokens',
+            out = { price = 500, max = 3 },
+            owned = { price = 300, max = 10 },
+        },
+    },
     Key = {
         checkMs = 3000,
         label = 'Cheie · %s',
