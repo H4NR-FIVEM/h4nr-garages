@@ -4,8 +4,6 @@ RegisterNetEvent('h4nr-garages:notify', function(key)
     Notify(key)
 end)
 local currentHint
--- While G parks the car being driven, the engine key (also G by default) stays quiet.
-local parkingKey = false
 local function Pressed()
     for _, control in ipairs(GarageConfig.Interact.controls) do
         if IsControlJustReleased(0, control) then
@@ -219,9 +217,6 @@ RegisterCommand('feathervehiclelock', function()
     end)
 end, false)
 RegisterCommand('feathervehicleengine', function()
-    if parkingKey then
-        return
-    end
     CreateThread(function()
         Key('engine')
     end)
@@ -242,7 +237,7 @@ CreateThread(function()
     while true do
         local pause = 500
         local ped = PlayerPedId()
-        local shownHint, parkHint = false, false
+        local shownHint = false
         GaragePanel.Watch(ped, GetEntityCoords(ped))
         if not GaragePanel.Busy() and exports['feather-character']:HasActiveCharacter() then
             local coords, vehicle = GetEntityCoords(ped), GetVehiclePedIsIn(ped, false)
@@ -266,7 +261,6 @@ CreateThread(function()
                     pause = 0
                     shownHint = true
                     local canOpen = vehicle == 0 and near
-                    parkHint = vehicle ~= 0
                     Hint(garageId, canOpen, vehicle ~= 0 or empty ~= nil)
                     if Pressed() then
                         if canOpen then
@@ -292,7 +286,6 @@ CreateThread(function()
         if not shownHint or GaragePanel.Busy() then
             Hint(nil)
         end
-        parkingKey = parkHint and shownHint
         -- Prevent GTA's automatic engine start while the server says it is off, and keep
         -- a driver without the key from moving a car someone else left running.
         local vehicle = GetVehiclePedIsIn(ped, false)

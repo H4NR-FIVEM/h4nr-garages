@@ -215,7 +215,7 @@ for _, name in ipairs({
 }) do
     _G[name] = function() end
 end
-local pressed, pressedControl = true, 47
+local pressed, pressedControl = true, 45
 function IsControlJustReleased(_, control)
     if control ~= pressedControl then
         return false
@@ -311,11 +311,11 @@ check(
 )
 local sawHint = false
 for _, hint in ipairs(hints) do
-    if hint and hint.tabs[1].controls[1].key == 'G' and hint.tabs[1].controls[1].label == T('open_label') then
+    if hint and hint.tabs[1].controls[1].key == 'R' and hint.tabs[1].controls[1].label == T('open_label') then
         sawHint = true
     end
 end
-check('on-foot prompt explains G interaction', sawHint)
+check('on-foot prompt explains R interaction', sawHint)
 local mainTask = backgroundTasks[1]
 local function frame()
     local ok, problem = coroutine.resume(mainTask)
@@ -345,7 +345,7 @@ frame()
 check('over water the arrow stays above the seabed', markers[#markers].z == water.z - 1.5 + GarageConfig.Marker.height)
 ped.coords = pillboxSpawn
 frame()
-check('driver prompt offers G to park', hints[#hints].tabs[1].controls[1].key == 'G' and hints[#hints].tabs[1].controls[1].label == T('store_label'))
+check('driver prompt offers R to park', hints[#hints].tabs[1].controls[1].key == 'R' and hints[#hints].tabs[1].controls[1].label == T('store_label'))
 currentVehicle = 0
 ped.coords = GarageConfig.Garages.pillboxgarage.coords
 pressed = true
@@ -563,18 +563,18 @@ end
 frame()
 clock = clock + 1000
 frame()
-check('beside your empty car at the point, G opens the list',
-    hint()[1].key == 'G' and hint()[1].label == T('open_label') and hint()[2] == nil)
-pressed, pressedControl = true, 47
+check('beside your empty car at the point, R opens the list',
+    hint()[1].key == 'R' and hint()[1].label == T('open_label') and hint()[2] == nil)
+pressed, pressedControl = true, 45
 frame()
-check('G opens the list beside the car', focused)
+check('R opens the list beside the car', focused)
 GaragePanel.Close()
 -- Away from the point, but beside the car and inside the garage's range.
 local point = GarageConfig.Garages.pillboxgarage.coords
 ped.coords = vector3(point.x + 20, point.y, point.z)
 clock = clock + 1000
 frame()
-check('away from the point G parks, with no list', hint()[1].key == 'G' and hint()[1].label == T('store_label') and hint()[2] == nil)
+check('away from the point R parks, with no list', hint()[1].key == 'R' and hint()[1].label == T('store_label') and hint()[2] == nil)
 before = #rpcCalls
 pressed = true
 frame()
@@ -584,7 +584,7 @@ for index = before + 1, #rpcCalls do
         storing = rpcCalls[index]
     end
 end
-check('G parks the car beside you', not focused and storing and storing.params.assetId == id and storing.params.props.fromVehicle == 55)
+check('R parks the car beside you', not focused and storing and storing.params.assetId == id and storing.params.props.fromVehicle == 55)
 pressed = false
 allowed = false
 clock = clock + GarageConfig.Key.checkMs + 1000
@@ -599,7 +599,7 @@ frame()
 clock = clock + 1000
 frame()
 check('a car with a driver is not offered', hints[#hints] == false)
--- At the wheel G parks, through the vehicle's G control, and the engine key stays quiet.
+-- At the wheel R parks, through the vehicle's own R control (80).
 seatTaken, currentVehicle = 1, 77
 vehicleState = { h4nrAssetId = id }
 ped.coords = pillboxSpawn
@@ -608,13 +608,10 @@ replies['h4nr-garages:canDrive'] = { ok = true, value = { allowed = true } }
 pressed, pressedControl = true, 38
 frame()
 check('at the wheel E does not park', pressed and #rpcCalls <= before + 1 and rpcCalls[#rpcCalls].name ~= 'h4nr-garages:store')
-local beforeEngine = #rpcCalls
-commands.feathervehicleengine()
-check('the engine key does nothing while G parks', #rpcCalls == beforeEngine)
-pressed, pressedControl = true, 58
+pressed, pressedControl = true, 80
 frame()
-check('at the wheel G parks', rpcCalls[#rpcCalls].name == 'h4nr-garages:store')
-pressed, pressedControl, currentVehicle = false, 47, 0
+check('at the wheel R parks', rpcCalls[#rpcCalls].name == 'h4nr-garages:store')
+pressed, pressedControl, currentVehicle = false, 45, 0
 -- The car comes out as it was parked, through Toolkit.
 local readyProps = { engineHealth = 300, deformation = { { 1, 2, 0, 0.2 } } }
 function NetworkHasControlOfEntity()
