@@ -4,7 +4,18 @@ RegisterNetEvent('h4nr-garages:notify', function(key)
     Notify(key)
 end)
 local currentHint
--- E opens the list at the garage point; R parks.
+-- While G parks the car being driven, the engine key (also G by default) stays quiet.
+local parkingKey = false
+local function Pressed()
+    for _, control in ipairs(GarageConfig.Interact.controls) do
+        if IsControlJustReleased(0, control) then
+            return true
+        end
+    end
+    return false
+end
+-- One key: at the garage point it opens the list (which also parks the car beside you), elsewhere
+-- in range it parks.
 local function Hint(garageId, canOpen, canPark)
     local key = garageId and ('%s:%s:%s'):format(garageId, canOpen, canPark)
     if key == currentHint then
@@ -15,13 +26,9 @@ local function Hint(garageId, canOpen, canPark)
         exports['feather-toolkit']:ClearControlHints()
         return
     end
-    local controls = {}
-    if canOpen then
-        controls[#controls + 1] = { key = 'E', label = T('open_label') }
-    end
-    if canPark then
-        controls[#controls + 1] = { key = 'R', label = T('store_label') }
-    end
+    local controls = {
+        { key = GarageConfig.Interact.label, label = T(canOpen and 'open_label' or 'store_label') },
+    }
     exports['feather-toolkit']:SetControlHints({
         tabs = { { title = GarageConfig.Garages[garageId].label, controls = controls } },
         activeTab = 1,
@@ -212,6 +219,9 @@ RegisterCommand('feathervehiclelock', function()
     end)
 end, false)
 RegisterCommand('feathervehicleengine', function()
+    if parkingKey then
+        return
+    end
     CreateThread(function()
         Key('engine')
     end)
@@ -232,7 +242,7 @@ CreateThread(function()
     while true do
         local pause = 500
         local ped = PlayerPedId()
-        local shownHint = false
+        local shownHint, parkHint = false, false
         GaragePanel.Watch(ped, GetEntityCoords(ped))
         if not GaragePanel.Busy() and exports['feather-character']:HasActiveCharacter() then
             local coords, vehicle = GetEntityCoords(ped), GetVehiclePedIsIn(ped, false)
@@ -256,13 +266,13 @@ CreateThread(function()
                     pause = 0
                     shownHint = true
                     local canOpen = vehicle == 0 and near
+                    parkHint = vehicle ~= 0
                     Hint(garageId, canOpen, vehicle ~= 0 or empty ~= nil)
-                    if canOpen and IsControlJustReleased(0, 38) then
-                        Hint(nil)
-                        GaragePanel.Open(garageId)
-                    elseif IsControlJustReleased(0, 45) or IsControlJustReleased(0, 80) then
-                        -- R is 45 on foot and 80 in a vehicle.
-                        if empty then
+                    if Pressed() then
+                        if canOpen then
+                            Hint(nil)
+                            GaragePanel.Open(garageId)
+                        elseif empty then
                             Hint(nil)
                             Park(garageId, emptyAsset, empty)
                         elseif vehicle ~= 0 then
@@ -282,6 +292,7 @@ CreateThread(function()
         if not shownHint or GaragePanel.Busy() then
             Hint(nil)
         end
+        parkingKey = parkHint and shownHint
         -- Prevent GTA's automatic engine start while the server says it is off, and keep
         -- a driver without the key from moving a car someone else left running.
         local vehicle = GetVehiclePedIsIn(ped, false)

@@ -23,12 +23,12 @@ ensure h4nr-vehicleshop
 ## In game
 
 - Buy at PDM, the marina or LSIA. The vehicle is delivered to a garage, not to the street.
-- A car garage has one point. Stand there and press **E** to open your list and pick a vehicle: it appears on that point. Boats and aircraft keep a separate point for the player. Any garage of that vehicle type works, wherever the vehicle was parked, at no cost.
+- A car garage has one point. Stand there and press **G** to open your list and pick a vehicle: it appears on that point. Boats and aircraft keep a separate point for the player. Any garage of that vehicle type works, wherever the vehicle was parked, at no cost.
 - The panel lists every vehicle of that type with its real name, plate, where it is and, when parked, its engine, body and fuel from the last parking. Search by model or plate, or filter by stored and out. Up and Down move the selection, Enter in the search box runs the main action, Escape closes. The main button follows the selected vehicle, and when nothing can be done the panel says why. Refusals appear in the panel, not as notifications.
 - Taking a vehicle out puts its key in your inventory. It is refused when you have no room for the key.
 - **G** starts or stops the engine; **U** locks or unlocks the nearest car you hold the key for. Both can be rebound in the FiveM key settings.
-- As the driver with the key, press **R** near the spawn point or garage to park. Parking takes the key, wherever it is.
-- On foot beside an empty vehicle you hold the key for, within `GarageConfig.ParkDistance` of the garage, press **R** to park it. At the garage point, **E** still opens the list.
+- As the driver with the key, press **G** near the spawn point or garage to park. Parking takes the key, wherever it is. While parking is offered, G does not toggle the engine.
+- On foot beside an empty vehicle you hold the key for, within `GarageConfig.ParkDistance` of the garage, press **G** to park it. At the garage point, **G** opens the list instead, where the car beside you can be parked too. The key and its controls are in `GarageConfig.Interact`.
 - Only one vehicle comes out of a garage at a time, and only when `GarageConfig.SpawnClearance` around the spawn point is free (6 m for cars, 12 m for boats, 20 m for aircraft). Otherwise the retrieval is refused and nothing changes.
 - Picking another vehicle while one stands in range offers **Take out and park** that one first, as well as plain retrieval. If the parking is refused nothing comes out. If the retrieval is then refused, the old vehicle stays parked. A vehicle farther away is not touched.
 - On foot, an empty vehicle of yours within `GarageConfig.ParkDistance` (30 m) of the garage marker or spawn point appears first in the panel, under **Park near you**, with **Store vehicle** as its action. It works at any garage of that vehicle type and needs the key as well.

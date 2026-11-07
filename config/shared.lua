@@ -4,6 +4,8 @@ GarageConfig = {
     ParkDistance = 30.0,
     PanelDistance = 15.0,
     BesideDistance = 5.0,
+    -- One key opens the list at the garage point and parks: G on foot (47) and in a vehicle (58).
+    Interact = { label = 'G', controls = { 47, 58 } },
     -- Metres around the spawn point that must be free of any vehicle, measured between centres.
     SpawnClearance = { vehicle = 6.0, boat = 12.0, aircraft = 20.0 },
     Marker = { type = 2, drawDistance = 25.0, scale = 0.2, color = { 0, 128, 0, 155 }, height = 1.1 },
