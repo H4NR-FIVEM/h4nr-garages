@@ -16,7 +16,7 @@ Locales.ro = {
 
     retrieve = 'Scoate vehiculul',
     swap = 'Scoate și parchează %s',
-    retrieve_with = 'Scoate cu remorca %s (%s)',
+    retrieve_with = 'Cu remorca %s (%s)',
     trailer_slots_reason = 'Camionul cu remorcă ocupă două locuri de vehicule scoase.',
     trailer_failed = 'Camionul a ieșit, dar remorca nu a putut fi scoasă.',
     trailer_not_hitched = 'Remorca e în spatele camionului, dar nu s-a agățat. Dă cu spatele la ea.',

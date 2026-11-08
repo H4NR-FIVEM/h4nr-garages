@@ -79,6 +79,9 @@ h1 { margin: 3px 0 0; font-family: var(--fx-font-display); font-size: 19px; line
 .notice { color: var(--warn); }
 .notice.success { color: var(--accent-2); }
 .actions { display: grid; gap: 6px; }
+.tow { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 13px; color: var(--text); cursor: pointer; }
+.tow input { flex: none; width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: inherit; }
+.tow.disabled { color: var(--muted); cursor: not-allowed; }
 .primary, .secondary { width: 100%; font-family: var(--fx-font-display); text-transform: uppercase; }
 .primary { padding: 12px 14px; font-size: 13px; font-weight: 600; letter-spacing: .12em; background: var(--accent); color: var(--fx-on-accent, #ffffff); border-color: var(--accent); border-radius: 0; clip-path: var(--fx-chamfer); }
 .primary:hover:not(:disabled) { filter: brightness(1.15); }

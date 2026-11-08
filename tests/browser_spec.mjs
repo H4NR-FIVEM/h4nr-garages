@@ -110,6 +110,30 @@ try {
   assert.deepEqual(last('action').body, { session: 1, assetId: 'zentorno', id: 'rekey', method: 'bank' });
   checks += 1;
 
+  // A truck comes out alone unless a trailer is ticked.
+  const tow = [{ id: 'retrieve', label: 'Scoate vehiculul' }, { id: 'retrieve', method: 'tr1', towing: true, label: 'Cu remorca Tanker (TR1)' }, { id: 'retrieve', method: 'tr2', towing: true, label: 'Cu remorca Trflat (TR2)' }];
+  const truckList = [{ id: 'hauler', name: 'Hauler', plate: 'TIR 1', status: 'Parcat', tone: 'ok', group: 'stored', actions: tow }];
+  await open(truckList);
+  check(await page.locator('.tow input').count() === 2 && await page.locator('.primary, .secondary').count() === 1, 'trailers are checkboxes beside one button');
+  check(await page.locator('.tow input:checked').count() === 0, 'nothing is ticked at first');
+  await shot('trailer-720');
+  await page.locator('.primary').click();
+  await page.waitForFunction(() => document.querySelector('.primary:not(:disabled)'));
+  assert.deepEqual(last('action').body, { session: 1, assetId: 'hauler', id: 'retrieve' });
+  await page.locator('.tow input').nth(0).check();
+  await page.locator('.tow input').nth(1).check();
+  check(await page.locator('.tow input:checked').count() === 1, 'one trailer at a time');
+  await page.locator('.primary').click();
+  await page.waitForFunction(() => document.querySelector('.primary:not(:disabled)'));
+  assert.deepEqual(last('action').body, { session: 1, assetId: 'hauler', id: 'retrieve', method: 'tr2' });
+  await page.locator('.tow input').nth(1).uncheck();
+  await page.locator('.primary').click();
+  await page.waitForFunction(() => document.querySelector('.primary:not(:disabled)'));
+  assert.deepEqual(last('action').body, { session: 1, assetId: 'hauler', id: 'retrieve' });
+  checks += 3;
+  await open();
+  await page.locator('.row', { hasText: 'Zentorno' }).click();
+
   // Search and filters.
   await page.fill('#search', 'ls56');
   check((await names()).join() === 'T20' && await selectedName() === 'T20', 'search by plate moves the selection');

@@ -8,6 +8,8 @@
   let session = null, texts = {}, items = [], selected = null, filter = 'all', query = '', busy = false;
   // Slot meters and premium offers; `armed` is the offer waiting for its confirming click.
   let slots = null, armed = null;
+  // Per truck, the trailer ticked for this panel. Nothing ticked means the truck comes out alone.
+  let ticked = {};
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -98,6 +100,14 @@
       if (keepFocus) chosen.focus();
     }
   }
+  function buttons(item) {
+    return item.actions.filter((action) => !action.towing);
+  }
+  // Taking the truck out carries the ticked trailer, which the server checks like any other action.
+  function chosen(item, action) {
+    const towing = action.id === 'retrieve' && item.actions.find((candidate) => candidate.towing && !candidate.disabled && candidate.method === ticked[item.id]);
+    return towing || action;
+  }
   function renderFoot() {
     const item = current();
     const shown = item && ordered().includes(item) ? item : null;
@@ -106,7 +116,20 @@
     const host = $('actions');
     host.replaceChildren();
     if (!shown) return;
-    shown.actions.forEach((action, index) => {
+    for (const action of shown.actions.filter((candidate) => candidate.towing)) {
+      const label = node('label', `tow${action.disabled ? ' disabled' : ''}`);
+      const box = node('input');
+      box.type = 'checkbox';
+      box.checked = ticked[shown.id] === action.method && !action.disabled;
+      box.disabled = busy || Boolean(action.disabled);
+      box.addEventListener('change', () => {
+        ticked[shown.id] = box.checked ? action.method : undefined;
+        for (const other of host.querySelectorAll('.tow input')) if (other !== box) other.checked = false;
+      });
+      label.append(box, node('span', '', action.label));
+      host.append(label);
+    }
+    buttons(shown).forEach((action, index) => {
       const button = node('button', index === 0 ? 'primary' : 'secondary', action.label);
       button.type = 'button';
       button.disabled = busy || Boolean(action.disabled);
@@ -189,7 +212,8 @@
     showNotice('');
     let result = null;
     try {
-      result = await post('action', { session: active, assetId: item.id, id: action.id, method: action.method });
+      const sending = chosen(item, action);
+      result = await post('action', { session: active, assetId: item.id, id: sending.id, method: sending.method });
     } catch {
       result = null;
     }
@@ -209,7 +233,7 @@
   }
   function activate() {
     const item = current();
-    const action = item && item.actions.find((candidate) => !candidate.disabled);
+    const action = item && buttons(item).find((candidate) => !candidate.disabled);
     if (item && action && ordered().includes(item)) run(item, action);
   }
 
@@ -228,7 +252,7 @@
       session = data.session;
       texts = data.texts || {};
       items = [];
-      selected = null; filter = 'all'; query = ''; busy = false; slots = null; armed = null;
+      selected = null; filter = 'all'; query = ''; busy = false; slots = null; armed = null; ticked = {};
       $('kind').textContent = data.kind || '';
       $('garage-name').textContent = data.label || '';
       $('search').value = '';

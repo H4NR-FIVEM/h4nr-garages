@@ -38,7 +38,8 @@ local function OutFull(slots)
     return slots ~= nil and slots.out >= slots.outLimit
 end
 -- A truck can take any trailer that could itself come out. The trailer counts as a vehicle out, and
--- `method` carries its asset, since the page sends back only an id and a method.
+-- `method` carries its asset, since the page sends back only an id and a method. The page draws
+-- `towing` actions as checkboxes: unticked, the truck comes out alone.
 local function Towing(item, trailers, slots)
     local actions = {}
     if not GarageConfig.Towing.tractors[item.model:lower()] then
@@ -48,6 +49,7 @@ local function Towing(item, trailers, slots)
     for _, trailer in ipairs(trailers) do
         actions[#actions + 1] = Action('retrieve', T('retrieve_with'):format(VehicleName(trailer.model), trailer.plate or ''), {
             method = trailer.assetId,
+            towing = true,
             disabled = short or nil,
         })
     end
@@ -57,11 +59,15 @@ end
 -- With every out slot taken only the swap is left, since it parks a car before taking this one out.
 local function Retrieval(item, old, slots, trailers)
     local full = OutFull(slots)
-    local actions, short = Towing(item, trailers, slots)
+    local towing, short = Towing(item, trailers, slots)
+    local actions = {}
     if old then
-        table.insert(actions, 1, Action('swap', T('swap'):format(old.name)))
+        actions[1] = Action('swap', T('swap'):format(old.name))
     end
     actions[#actions + 1] = Action('retrieve', T('retrieve'), { disabled = full or nil })
+    for _, action in ipairs(towing) do
+        actions[#actions + 1] = action
+    end
     if full and not old then
         return T('out_limit_reason'), actions
     end

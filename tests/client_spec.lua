@@ -641,16 +641,16 @@ end
 local truck = vehicle({ assetId = 'truck', model = 'hauler', state = 'stored' })
 local tanker = vehicle({ assetId = 'tank', model = 'tanker', plate = 'TR1', state = 'stored' })
 view = open({ truck, tanker })
-local offer = row(view, 'truck').actions[1]
-check('a truck offers its trailer first', offer.id == 'retrieve' and offer.method == 'tank' and offer.label == T('retrieve_with'):format('tanker', 'TR1'))
-check('a truck can still come out alone', row(view, 'truck').actions[2].method == nil)
+local offer = row(view, 'truck').actions[2]
+check('a truck offers its trailer as a choice', offer.id == 'retrieve' and offer.method == 'tank' and offer.towing and offer.label == T('retrieve_with'):format('tanker', 'TR1'))
+check('alone is the main action', row(view, 'truck').actions[1].method == nil and not row(view, 'truck').actions[1].towing)
 check('a trailer offers no other trailer', #row(view, 'tank').actions == 1)
 GaragePanel.Close()
 replies['h4nr-garages:list'] = { ok = true, value = { items = { truck, tanker }, slots = { out = 2, outLimit = 3, owned = 2, ownedLimit = 5 } } }
 pressed = true
 frame()
 view = lastSent('view')
-check('one free slot cannot take both', row(view, 'truck').actions[1].disabled and row(view, 'truck').reason == T('trailer_slots_reason'))
+check('one free slot cannot take both', row(view, 'truck').actions[2].disabled and not row(view, 'truck').actions[1].disabled and row(view, 'truck').reason == T('trailer_slots_reason'))
 GaragePanel.Close()
 view = open({ truck, tanker })
 before = #rpcCalls
