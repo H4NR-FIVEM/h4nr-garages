@@ -37,7 +37,7 @@ function GarageSlots.Limits(characterId, assetType)
     local extra = Extra(characterId)
     return {
         out = base.out + extra.bought.out + extra.granted.out,
-        owned = base.owned + extra.bought.owned + extra.granted.owned,
+        owned = base.owned and base.owned + extra.bought.owned + extra.granted.owned or nil,
         bought = extra.bought,
     }
 end

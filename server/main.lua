@@ -637,7 +637,7 @@ exports('GetVehicleSlots', function(request)
     if not slots then
         return Garage.Err('unavailable')
     end
-    slots.canReceive = not slots.limited or slots.owned < slots.ownedLimit
+    slots.canReceive = not slots.limited or not slots.ownedLimit or slots.owned < slots.ownedLimit
     return Garage.Ok(slots)
 end)
 -- Read by the driver's client: whoever sits at the wheel needs the key, whatever the engine state.

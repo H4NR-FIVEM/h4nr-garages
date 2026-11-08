@@ -739,11 +739,11 @@ coords[1] = GarageConfig.Garages.pillboxgarage.coords
 saved.color1, saved.color2 = { 12, 34, 56 }, 7
 rows[orderId].props_json = json.encode(saved)
 local listed = call('list', { garage = 'pillboxgarage' }).value.slots
-check('list reports the slots', listed and listed.owned == 1 and listed.out == 0 and listed.outLimit == 3)
+check('list reports the slots', listed and listed.owned == 1 and listed.out == 0 and listed.outLimit == 2)
 GarageConfig.Slots.limits.vehicle.out = 0
 check('every out slot taken refuses retrieval', call('retrieve', spec).code == 'out_limit' and spawnCount == 1)
 check('the refused car stays parked', rows[orderId].status == 'stored')
-GarageConfig.Slots.limits.vehicle.out = 3
+GarageConfig.Slots.limits.vehicle.out = 2
 check('parked vehicle retrieves again', call('retrieve', spec).ok and spawnCount == 2)
 check('dents stay out of the spawn state bag', json.decode(rows[orderId].props_json).deformation[1][4] == 0.2 and lastSpawnProps.deformation == nil)
 check('RGB paint stays out of the spawn state bag', lastSpawnProps.color1 == nil and lastSpawnProps.color2 == 7)
@@ -942,7 +942,7 @@ check('a blocked place behind refuses both', call('retrieve', together).code == 
 entities[999], coords[999] = nil, nil
 GarageConfig.Slots.limits.vehicle.out = 1
 check('both must fit the out slots', call('retrieve', together).code == 'out_limit' and spawnCount == spawnsBefore)
-GarageConfig.Slots.limits.vehicle.out = 3
+GarageConfig.Slots.limits.vehicle.out = 2
 events = {}
 local pair = call('retrieve', together)
 check('truck and trailer come out', pair.ok and not pair.value.trailerProblem and spawnCount == spawnsBefore + 2)

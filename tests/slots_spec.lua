@@ -162,6 +162,12 @@ assets.ListAssetsByHolder = function()
     return { ok = false, code = 'unavailable' }
 end
 check('unreadable count is nil', GarageSlots.Snapshot(C, 'vehicle', isLive) == nil)
+-- Without `owned` in the limits only the cars out are capped.
+local cappedOwned = GarageConfig.Slots.limits.vehicle.owned
+GarageConfig.Slots.limits.vehicle.owned = nil
+local noCap = GarageSlots.Limits(C, 'vehicle')
+check('no cap on cars held', noCap.owned == nil and noCap.out ~= nil)
+GarageConfig.Slots.limits.vehicle.owned = cappedOwned
 -- Admins set slots by player id, in game or from the console.
 check('the command is restricted to admins', restricted.garageslots == true)
 commands.garageslots(3, { '7', 'out', '4' })

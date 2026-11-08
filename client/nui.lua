@@ -193,11 +193,12 @@ local function SlotView(slots)
             allowed[kind] = true
         end
     end
+    local meters = { { label = T('slots_out'), used = slots.out, limit = slots.outLimit } }
+    if slots.ownedLimit then
+        meters[2] = { label = T('slots_owned'), used = slots.owned, limit = slots.ownedLimit }
+    end
     return {
-        meters = {
-            { label = T('slots_out'), used = slots.out, limit = slots.outLimit },
-            { label = T('slots_owned'), used = slots.owned, limit = slots.ownedLimit },
-        },
+        meters = meters,
         offers = offers,
     }, allowed
 end

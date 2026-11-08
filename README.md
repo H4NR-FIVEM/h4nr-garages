@@ -38,8 +38,8 @@ Default locations: Pillbox for cars, Puerto del Sol for boats and LSIA for aircr
 
 ## Vehicle slots
 
-Per character, from `GarageConfig.Slots`: by default at most **3 cars out** at once and **5 cars**
-held. Boats and aircraft have no limit. The garage panel shows both meters and sells extra slots for
+Per character, from `GarageConfig.Slots`: by default at most **2 cars out** at once and **no cap**
+on cars held (set `owned` in `limits` to add one). Boats and aircraft have no limit. The garage panel shows both meters and sells extra slots for
 the premium currency (`tokens`); the purchase needs a confirming second click. Shops ask
 `GetVehicleSlots` before charging, so a full garage refuses a purchase or a sale without taking
 money. Admins (`command.garageslots`, which `group.admin` already has) grant slots in game or from
