@@ -30,7 +30,19 @@ exports = setmetatable({}, {
         return assets
     end,
 })
-function RegisterCommand() end
+local commands, restricted, notified = {}, {}, {}
+function RegisterCommand(name, handler, isRestricted)
+    commands[name], restricted[name] = handler, isRestricted
+end
+function TriggerClientEvent(name, source, key)
+    notified[#notified + 1] = { name = name, source = source, key = key }
+end
+function assets:GetSessionContext(source)
+    if source == 7 then
+        return { ok = true, value = { characterId = C } }
+    end
+    return { ok = false, code = 'no_session' }
+end
 DB = {
     one = function(_, id)
         local row = slotRows[id]
@@ -150,4 +162,15 @@ assets.ListAssetsByHolder = function()
     return { ok = false, code = 'unavailable' }
 end
 check('unreadable count is nil', GarageSlots.Snapshot(C, 'vehicle', isLive) == nil)
+-- Admins set slots by player id, in game or from the console.
+check('the command is restricted to admins', restricted.garageslots == true)
+commands.garageslots(3, { '7', 'out', '4' })
+check('an admin grants slots to an online player', slotRows[C].granted_out == 4)
+check('the admin is told', notified[#notified].source == 3 and notified[#notified].key == 'slots_granted')
+commands.garageslots(0, { C:upper(), 'owned', '2' })
+check('the console still takes a character id', slotRows[C].granted_owned == 2)
+commands.garageslots(3, { '8', 'out', '9' })
+check('a player without a character is refused', slotRows[C].granted_out == 4 and notified[#notified].key == 'slots_grant_usage')
+commands.garageslots(3, { '7', 'all', '9' })
+check('a wrong kind is refused', slotRows[C].granted_out == 4 and notified[#notified].key == 'slots_grant_usage')
 print(('slots_spec: %d checks passed'):format(passed))

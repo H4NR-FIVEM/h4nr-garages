@@ -1,9 +1,9 @@
 -- Vehicle slots of a character: how many vehicles of a type may be out at once (`out`) and how
 -- many it may hold (`owned`). The base comes from GarageConfig.Slots.limits; extra slots are
--- bought with the premium currency (`bought_*`) or set by staff from the console (`granted_*`).
+-- bought with the premium currency (`bought_*`) or set by staff (`granted_*`).
 -- Bought counts only grow, so each purchase has its own idempotency key.
 GarageSlots = {}
-local assets = exports['feather-assets']
+local assets, core = exports['feather-assets'], exports['feather-core']
 local COLUMNS = { out = 'bought_out', owned = 'bought_owned' }
 local GRANTS = { out = 'granted_out', owned = 'granted_owned' }
 function GarageSlots.Migrate()
@@ -147,14 +147,26 @@ function GarageSlots.Grant(characterId, kind, amount)
     )
     return Garage.Ok(true)
 end
--- Server console only: garageslots <characterId> <out|owned> <amount>
-RegisterCommand('garageslots', function(source, args)
-    if source ~= 0 then
-        return
+-- A server id means the character that player is on now; anything else is taken as a character id.
+local function GrantTarget(argument)
+    local text = type(argument) == 'string' and argument:lower() or nil
+    if text and text:match('^%d+$') then
+        local session = core:GetSessionContext(tonumber(text))
+        return session.ok and session.value.characterId or nil
     end
-    local result = GarageSlots.Grant(args[1] and args[1]:lower(), args[2], tonumber(args[3]))
-    print(
-        result.ok and ('[h4nr-garages] %s: granted %s slots = %s'):format(args[1], args[2], args[3])
-            or '[h4nr-garages] usage: garageslots <characterId> <out|owned> <amount>'
-    )
+    return text
+end
+-- garageslots <player id|characterId> <out|owned> <amount>
+-- Restricted: the console, or a player allowed command.garageslots (group.admin has `command`).
+RegisterCommand('garageslots', function(source, args)
+    local character = GrantTarget(args[1])
+    local result = GarageSlots.Grant(character, args[2], tonumber(args[3]))
+    if result.ok then
+        print(('[h4nr-garages] source %s: %s granted %s slots = %s'):format(source, character, args[2], args[3]))
+    elseif source == 0 then
+        print('[h4nr-garages] usage: garageslots <player id|characterId> <out|owned> <amount>')
+    end
+    if source ~= 0 then
+        TriggerClientEvent('h4nr-garages:notify', source, result.ok and 'slots_granted' or 'slots_grant_usage')
+    end
 end, true)

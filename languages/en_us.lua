@@ -16,6 +16,8 @@ Locales.en_us = {
 
     retrieve = 'Retrieve vehicle',
     swap = 'Take out and park %s',
+    slots_granted = 'The vehicle slots were set.',
+    slots_grant_usage = 'Usage: /garageslots <player id> <out|owned> <amount>. The player must be on a character.',
     retrieve_with = 'With trailer %s (%s)',
     trailer_slots_reason = 'A truck with a trailer takes two out slots.',
     trailer_failed = 'The truck came out, but the trailer could not.',

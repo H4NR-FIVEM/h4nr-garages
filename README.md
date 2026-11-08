@@ -42,13 +42,14 @@ Per character, from `GarageConfig.Slots`: by default at most **3 cars out** at o
 held. Boats and aircraft have no limit. The garage panel shows both meters and sells extra slots for
 the premium currency (`tokens`); the purchase needs a confirming second click. Shops ask
 `GetVehicleSlots` before charging, so a full garage refuses a purchase or a sale without taking
-money. Staff grant slots from the server console:
+money. Admins (`command.garageslots`, which `group.admin` already has) grant slots in game or from
+the server console:
 
 ```
-garageslots <characterId> <out|owned> <amount>
+/garageslots <player id|characterId> <out|owned> <amount>
 ```
 
-The amount replaces the granted extra; bought slots are kept separately.
+The amount replaces the granted extra (0 removes it); bought slots are kept separately.
 
 ## Vehicle keys
 

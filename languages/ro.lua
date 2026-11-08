@@ -16,6 +16,8 @@ Locales.ro = {
 
     retrieve = 'Scoate vehiculul',
     swap = 'Scoate și parchează %s',
+    slots_granted = 'Locurile de vehicule au fost setate.',
+    slots_grant_usage = 'Folosire: /garageslots <id jucător> <out|owned> <număr>. Jucătorul trebuie să fie conectat cu un caracter.',
     retrieve_with = 'Cu remorca %s (%s)',
     trailer_slots_reason = 'Camionul cu remorcă ocupă două locuri de vehicule scoase.',
     trailer_failed = 'Camionul a ieșit, dar remorca nu a putut fi scoasă.',
