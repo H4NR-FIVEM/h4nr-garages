@@ -275,13 +275,47 @@ local function Locations(source, params)
     end
     return Garage.Ok({ characterId = character, items = items, nextCursor = result.value.nextCursor })
 end
--- Runs with the garage's spawn point reserved, see Retrieve.
-local function TakeOut(source, params, garage, asset, row)
-    local point = vector3(garage.spawn.x, garage.spawn.y, garage.spawn.z)
+local function SpotFree(at, assetType)
+    local point = vector3(at.x, at.y, at.z)
     for _, other in ipairs(GetAllVehicles()) do
-        if #(GetEntityCoords(other) - point) < GarageConfig.SpawnClearance[garage.assetType] then
-            return Garage.Err('spawn_blocked')
+        if #(GetEntityCoords(other) - point) < GarageConfig.SpawnClearance[assetType] then
+            return false
         end
+    end
+    return true
+end
+-- The asset and row of a vehicle that can come out, after clearing the status of a lost entity.
+local function Retrievable(assetId, garage)
+    local row = Garage.Row(assetId)
+    local read = assets:GetAsset({ assetId = assetId })
+    if not row or not read.ok then
+        return nil, Garage.Err('unavailable')
+    end
+    local asset = read.value
+    if asset.assetType ~= garage.assetType then
+        return nil, Garage.Err('invalid_garage')
+    end
+    if Vehicle(assetId) then
+        return nil, Garage.Err('already_out')
+    end
+    if row.status == 'out' or row.status == 'spawning' or row.status == 'storing' then
+        DB.exec(
+            "UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status IN ('out','spawning','storing')",
+            assetId
+        )
+        row.status = 'stored'
+    end
+    if row.status ~= 'stored' then
+        return nil, Garage.Err('busy')
+    end
+    return asset, row
+end
+-- Runs with the garage's spawn point reserved, see Retrieve. With `hitch` the vehicle is a trailer
+-- placed at hitch.at, and the client attaches it to the truck hitch.towNetId.
+local function TakeOut(source, params, garage, asset, row, hitch)
+    local at = hitch and hitch.at or garage.spawn
+    if not SpotFree(at, garage.assetType) then
+        return Garage.Err('spawn_blocked')
     end
     local kind = SpawnType(asset.modelKey, asset.assetType)
     if not kind then
@@ -312,7 +346,7 @@ local function TakeOut(source, params, garage, asset, row)
     local ok, netId, entity = pcall(FeatherVehicles.spawnVehicle, {
         model = asset.modelKey,
         type = kind,
-        spawnSource = garage.spawn,
+        spawnSource = at,
         props = SpawnProps(props),
         bucket = 0,
     })
@@ -334,8 +368,40 @@ local function TakeOut(source, params, garage, asset, row)
         SetVehicleDoorsLocked(entity, 2)
         return Garage.Err('forbidden')
     end
-    TriggerClientEvent('h4nr-garages:ready', source, netId, props)
+    if hitch then
+        TriggerClientEvent('h4nr-garages:hitch', source, hitch.towNetId, netId, props)
+    else
+        TriggerClientEvent('h4nr-garages:ready', source, netId, props)
+    end
     return Garage.Ok({ netId = netId })
+end
+local function BehindSpawn(spawn)
+    local radians, gap = math.rad(spawn.w), GarageConfig.Towing.behind
+    return vector4(spawn.x + math.sin(radians) * gap, spawn.y - math.cos(radians) * gap, spawn.z, spawn.w)
+end
+-- May this truck come out with that trailer? Nil when it may, otherwise the refusal.
+local function TrailerRefusal(source, params, asset)
+    local towing = GarageConfig.Towing
+    if params.trailer == params.assetId or not Owns(source, params.trailer) then
+        return 'forbidden'
+    end
+    local read = assets:GetAsset({ assetId = params.trailer })
+    if not read.ok then
+        return 'unavailable'
+    end
+    if not towing.tractors[asset.modelKey:lower()] or not towing.trailers[read.value.modelKey:lower()] then
+        return 'invalid_input'
+    end
+end
+local function TakeOutTrailer(source, params, garage, towNetId)
+    return Garage.Lock(params.trailer, function()
+        local asset, row = Retrievable(params.trailer, garage)
+        if not asset then
+            return row
+        end
+        local trailerParams = { garage = params.garage, assetId = params.trailer }
+        return TakeOut(source, trailerParams, garage, asset, row, { at = BehindSpawn(garage.spawn), towNetId = towNetId })
+    end)
 end
 local function Retrieve(source, params)
     local garage = AtGarage(source, params.garage)
@@ -343,27 +409,15 @@ local function Retrieve(source, params)
         return Garage.Err('forbidden')
     end
     return Garage.Lock(params.assetId, function()
-        local row = Garage.Row(params.assetId)
-        local read = assets:GetAsset({ assetId = params.assetId })
-        if not row or not read.ok then
-            return Garage.Err('unavailable')
+        local asset, row = Retrievable(params.assetId, garage)
+        if not asset then
+            return row
         end
-        local asset = read.value
-        if asset.assetType ~= garage.assetType then
-            return Garage.Err('invalid_garage')
-        end
-        if Vehicle(params.assetId) then
-            return Garage.Err('already_out')
-        end
-        if row.status == 'out' or row.status == 'spawning' or row.status == 'storing' then
-            DB.exec(
-                "UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ? AND status IN ('out','spawning','storing')",
-                params.assetId
-            )
-            row.status = 'stored'
-        end
-        if row.status ~= 'stored' then
-            return Garage.Err('busy')
+        if params.trailer ~= nil then
+            local refusal = TrailerRefusal(source, params, asset)
+            if refusal then
+                return Garage.Err(refusal)
+            end
         end
         -- One request per player at a time (playersBusy), and only the owner takes a car out,
         -- so the count cannot change between this check and the new entity.
@@ -371,13 +425,24 @@ local function Retrieve(source, params)
         if not slots then
             return Garage.Err('unavailable')
         end
-        if slots.limited and slots.out >= slots.outLimit then
+        if slots.limited and slots.out + (params.trailer and 2 or 1) > slots.outLimit then
             return Garage.Err('out_limit')
         end
         -- Taking out yields between the free-space check and the new entity, so two different cars
         -- could both pass the check. The point stays reserved until this car exists.
         return Garage.Lock('spawn:' .. params.garage, function()
-            return TakeOut(source, params, garage, asset, row)
+            if params.trailer and not SpotFree(BehindSpawn(garage.spawn), garage.assetType) then
+                return Garage.Err('spawn_blocked')
+            end
+            local taken = TakeOut(source, params, garage, asset, row)
+            if taken.ok and params.trailer then
+                -- The truck is already out and stays out; the driver is told about the trailer.
+                local trailer = TakeOutTrailer(source, params, garage, taken.value.netId)
+                if not trailer.ok then
+                    taken.value.trailerProblem = trailer.code or 'failed'
+                end
+            end
+            return taken
         end, 'spawn_blocked')
     end)
 end

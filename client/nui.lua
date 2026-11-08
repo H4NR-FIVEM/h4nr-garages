@@ -34,21 +34,41 @@ local function Action(id, label, extra)
     action.id, action.label = id, label
     return action
 end
--- Taking a car out, with the option of parking the one standing in the garage first. With every
--- out slot taken only the swap is left, since it parks a car before taking this one out.
-local function Retrieval(old, full)
-    local actions = {}
-    if old then
-        actions[1] = Action('swap', T('swap'):format(old.name))
-    end
-    actions[#actions + 1] = Action('retrieve', T('retrieve'), { disabled = full or nil })
-    return actions
-end
 local function OutFull(slots)
     return slots ~= nil and slots.out >= slots.outLimit
 end
+-- A truck can take any trailer that could itself come out. The trailer counts as a vehicle out, and
+-- `method` carries its asset, since the page sends back only an id and a method.
+local function Towing(item, trailers, slots)
+    local actions = {}
+    if not GarageConfig.Towing.tractors[item.model:lower()] then
+        return actions, false
+    end
+    local short = slots ~= nil and slots.out + 2 > slots.outLimit
+    for _, trailer in ipairs(trailers) do
+        actions[#actions + 1] = Action('retrieve', T('retrieve_with'):format(VehicleName(trailer.model), trailer.plate or ''), {
+            method = trailer.assetId,
+            disabled = short or nil,
+        })
+    end
+    return actions, short and actions[1] ~= nil
+end
+-- Why a retrieval is limited (when so), then its buttons. Parking the car in the way comes first.
+-- With every out slot taken only the swap is left, since it parks a car before taking this one out.
+local function Retrieval(item, old, slots, trailers)
+    local full = OutFull(slots)
+    local actions, short = Towing(item, trailers, slots)
+    if old then
+        table.insert(actions, 1, Action('swap', T('swap'):format(old.name)))
+    end
+    actions[#actions + 1] = Action('retrieve', T('retrieve'), { disabled = full or nil })
+    if full and not old then
+        return T('out_limit_reason'), actions
+    end
+    return short and not full and T('trailer_slots_reason') or nil, actions
+end
 -- Status line, why nothing can be done (when so) and the buttons of one vehicle.
-local function Describe(item, price, old, slots)
+local function Describe(item, price, old, slots, trailers)
     if item.rekey then
         if item.rekey.state == 'waiting' then
             local minutes = math.ceil(item.rekey.seconds / 60)
@@ -69,17 +89,14 @@ local function Describe(item, price, old, slots)
     end
     if item.state == 'stored' then
         local garage = GarageConfig.Garages[item.garage]
-        local full = OutFull(slots)
-        return garage and T('stored_at'):format(garage.label) or T('stored'),
-            'ok',
-            full and not old and T('out_limit_reason') or nil,
-            Retrieval(old, full)
+        local reason, actions = Retrieval(item, old, slots, trailers)
+        return garage and T('stored_at'):format(garage.label) or T('stored'), 'ok', reason, actions
     elseif item.state == 'out' then
         if item.onStreet then
             return T('out'), 'muted', T('on_street'), {}
         end
-        local full = OutFull(slots)
-        return T('out_lost'), 'warn', full and not old and T('out_limit_reason') or nil, Retrieval(old, full)
+        local reason, actions = Retrieval(item, old, slots, trailers)
+        return T('out_lost'), 'warn', reason, actions
     elseif item.state == 'sale_reserved' then
         return T('sale_reserved'), 'muted', T('sale_reserved'), {}
     end
@@ -103,8 +120,15 @@ local function View(items, price, garageId, slots)
     local list, byId = {}, {}
     local old = ClosestParkable(items, garageId)
     panel.old = old
+    local trailers = {}
     for _, item in ipairs(items) do
-        local status, tone, reason, actions = Describe(item, price, old, slots)
+        local free = item.state == 'stored' or (item.state == 'out' and not item.onStreet)
+        if free and item.available and not item.rekey and GarageConfig.Towing.trailers[item.model:lower()] then
+            trailers[#trailers + 1] = item
+        end
+    end
+    for _, item in ipairs(items) do
+        local status, tone, reason, actions = Describe(item, price, old, slots, trailers)
         local group = item.state == 'stored' and 'stored' or 'out'
         list[#list + 1] = {
             id = item.assetId,
@@ -251,7 +275,10 @@ end
 local function Run(session, garageId, assetId, entry, action)
     local value, code
     if action.id == 'retrieve' then
-        value, code = Request('retrieve', { garage = garageId, assetId = assetId })
+        value, code = Request('retrieve', { garage = garageId, assetId = assetId, trailer = action.method })
+        if value and value.trailerProblem then
+            Notify('trailer_failed')
+        end
     elseif action.id == 'swap' then
         local old = panel and panel.old
         if not old or not NetworkDoesEntityExistWithNetworkId(old.netId) then

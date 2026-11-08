@@ -215,8 +215,8 @@ for _, name in ipairs({
 }) do
     _G[name] = function() end
 end
-local pressed, pressedControl = true, 45
-function IsControlJustReleased(_, control)
+local pressed, pressedControl = true, 38
+function IsControlJustPressed(_, control)
     if control ~= pressedControl then
         return false
     end
@@ -311,11 +311,11 @@ check(
 )
 local sawHint = false
 for _, hint in ipairs(hints) do
-    if hint and hint.tabs[1].controls[1].key == 'R' and hint.tabs[1].controls[1].label == T('open_label') then
+    if hint and hint.tabs[1].controls[1].key == 'E' and hint.tabs[1].controls[1].label == T('open_label') then
         sawHint = true
     end
 end
-check('on-foot prompt explains R interaction', sawHint)
+check('on-foot prompt explains E opens the garage', sawHint)
 local mainTask = backgroundTasks[1]
 local function frame()
     local ok, problem = coroutine.resume(mainTask)
@@ -345,7 +345,7 @@ frame()
 check('over water the arrow stays above the seabed', markers[#markers].z == water.z - 1.5 + GarageConfig.Marker.height)
 ped.coords = pillboxSpawn
 frame()
-check('driver prompt offers R to park', hints[#hints].tabs[1].controls[1].key == 'R' and hints[#hints].tabs[1].controls[1].label == T('store_label'))
+check('driver prompt offers G to park', hints[#hints].tabs[1].controls[1].key == 'G' and hints[#hints].tabs[1].controls[1].label == T('store_label'))
 currentVehicle = 0
 ped.coords = GarageConfig.Garages.pillboxgarage.coords
 pressed = true
@@ -546,7 +546,7 @@ replies['h4nr-garages:retrieve'] = { ok = true, value = { netId = 12 } }
 view = open({ stored })
 check('with no old car there is only retrieval', #view.items[1].actions == 1 and view.items[1].actions[1].id == 'retrieve')
 GaragePanel.Close()
--- On foot beside the car: R parks it, E opens the list.
+-- On foot beside the car: G parks it, E opens the list.
 local function hint()
     return hints[#hints] and hints[#hints].tabs[1].controls or {}
 end
@@ -563,20 +563,20 @@ end
 frame()
 clock = clock + 1000
 frame()
-check('beside your empty car at the point, R opens the list',
-    hint()[1].key == 'R' and hint()[1].label == T('open_label') and hint()[2] == nil)
-pressed, pressedControl = true, 45
+check('beside your empty car at the point, E opens and G parks',
+    hint()[1].key == 'E' and hint()[1].label == T('open_label') and hint()[2].key == 'G' and hint()[2].label == T('store_label'))
+pressed, pressedControl = true, 38
 frame()
-check('R opens the list beside the car', focused)
+check('E opens the list beside the car', focused)
 GaragePanel.Close()
 -- Away from the point, but beside the car and inside the garage's range.
 local point = GarageConfig.Garages.pillboxgarage.coords
 ped.coords = vector3(point.x + 20, point.y, point.z)
 clock = clock + 1000
 frame()
-check('away from the point R parks, with no list', hint()[1].key == 'R' and hint()[1].label == T('store_label') and hint()[2] == nil)
+check('away from the point G parks, with no list', hint()[1].key == 'G' and hint()[1].label == T('store_label') and hint()[2] == nil)
 before = #rpcCalls
-pressed = true
+pressed, pressedControl = true, 47
 frame()
 local storing
 for index = before + 1, #rpcCalls do
@@ -584,7 +584,7 @@ for index = before + 1, #rpcCalls do
         storing = rpcCalls[index]
     end
 end
-check('R parks the car beside you', not focused and storing and storing.params.assetId == id and storing.params.props.fromVehicle == 55)
+check('G parks the car beside you', not focused and storing and storing.params.assetId == id and storing.params.props.fromVehicle == 55)
 pressed = false
 allowed = false
 clock = clock + GarageConfig.Key.checkMs + 1000
@@ -599,7 +599,7 @@ frame()
 clock = clock + 1000
 frame()
 check('a car with a driver is not offered', hints[#hints] == false)
--- At the wheel R parks, through the vehicle's own R control (80).
+-- At the wheel G parks a running car; with the engine off it stays the engine key.
 seatTaken, currentVehicle = 1, 77
 vehicleState = { h4nrAssetId = id }
 ped.coords = pillboxSpawn
@@ -608,10 +608,21 @@ replies['h4nr-garages:canDrive'] = { ok = true, value = { allowed = true } }
 pressed, pressedControl = true, 38
 frame()
 check('at the wheel E does not park', pressed and #rpcCalls <= before + 1 and rpcCalls[#rpcCalls].name ~= 'h4nr-garages:store')
-pressed, pressedControl = true, 80
+vehicleState = { h4nrAssetId = id, h4nrGarageEngine = false }
+before = #rpcCalls
+pressed, pressedControl = true, 47
 frame()
-check('at the wheel R parks', rpcCalls[#rpcCalls].name == 'h4nr-garages:store')
-pressed, pressedControl, currentVehicle = false, 45, 0
+check('with the engine off G does not park', pressed and #rpcCalls <= before + 1 and rpcCalls[#rpcCalls].name ~= 'h4nr-garages:store')
+vehicleState = { h4nrAssetId = id, h4nrGarageEngine = true }
+before = #rpcCalls
+pressed = false
+frame()
+commands.feathervehicleengine()
+check('the engine key stays quiet while G parks', #rpcCalls == before or rpcCalls[#rpcCalls].name ~= 'h4nr-garages:keys')
+pressed = true
+frame()
+check('at the wheel G parks a running car', rpcCalls[#rpcCalls].name == 'h4nr-garages:store')
+pressed, pressedControl, currentVehicle = false, 38, 0
 -- The car comes out as it was parked, through Toolkit.
 local readyProps = { engineHealth = 300, deformation = { { 1, 2, 0, 0.2 } } }
 function NetworkHasControlOfEntity()
@@ -621,4 +632,37 @@ function SetVehicleOnGroundProperly() end
 function SetPedIntoVehicle() end
 netEvents['h4nr-garages:ready'](12, readyProps)
 check('a retrieved car gets its saved properties', restored[#restored].entity == 1012 and restored[#restored].props == readyProps)
+-- A truck comes out with a stored trailer hitched behind it.
+ped.coords = GarageConfig.Garages.pillboxgarage.coords
+vehicleState, seatTaken = {}, 0
+lib.getClosestVehicle = function()
+    return nil
+end
+local truck = vehicle({ assetId = 'truck', model = 'hauler', state = 'stored' })
+local tanker = vehicle({ assetId = 'tank', model = 'tanker', plate = 'TR1', state = 'stored' })
+view = open({ truck, tanker })
+local offer = row(view, 'truck').actions[1]
+check('a truck offers its trailer first', offer.id == 'retrieve' and offer.method == 'tank' and offer.label == T('retrieve_with'):format('tanker', 'TR1'))
+check('a truck can still come out alone', row(view, 'truck').actions[2].method == nil)
+check('a trailer offers no other trailer', #row(view, 'tank').actions == 1)
+GaragePanel.Close()
+replies['h4nr-garages:list'] = { ok = true, value = { items = { truck, tanker }, slots = { out = 2, outLimit = 3, owned = 2, ownedLimit = 5 } } }
+pressed = true
+frame()
+view = lastSent('view')
+check('one free slot cannot take both', row(view, 'truck').actions[1].disabled and row(view, 'truck').reason == T('trailer_slots_reason'))
+GaragePanel.Close()
+view = open({ truck, tanker })
+before = #rpcCalls
+replies['h4nr-garages:retrieve'] = { ok = true, value = { netId = 12 } }
+check('the chosen trailer is sent', act('truck', 'retrieve', 'tank').ok and rpcCalls[#rpcCalls].params.trailer == 'tank')
+local attached
+function AttachVehicleToTrailer(tow, trailer)
+    attached = { tow = tow, trailer = trailer }
+end
+function IsVehicleAttachedToTrailer()
+    return attached ~= nil
+end
+netEvents['h4nr-garages:hitch'](12, 13, { engineHealth = 900 })
+check('the trailer is hitched to the truck', attached.tow == 1012 and attached.trailer == 1013)
 print(('client_spec: %d checks passed'):format(passed))

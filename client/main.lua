@@ -4,16 +4,16 @@ RegisterNetEvent('h4nr-garages:notify', function(key)
     Notify(key)
 end)
 local currentHint
-local function Pressed()
-    for _, control in ipairs(GarageConfig.Interact.controls) do
-        if IsControlJustReleased(0, control) then
+-- On the press, the same moment the engine key acts, so one tap never both starts and parks.
+local function Pressed(interaction)
+    for _, control in ipairs(interaction.controls) do
+        if IsControlJustPressed(0, control) then
             return true
         end
     end
     return false
 end
--- One key: at the garage point it opens the list (which also parks the car beside you), elsewhere
--- in range it parks.
+-- At the garage point one key opens the list; in range of it the other parks.
 local function Hint(garageId, canOpen, canPark)
     local key = garageId and ('%s:%s:%s'):format(garageId, canOpen, canPark)
     if key == currentHint then
@@ -24,9 +24,13 @@ local function Hint(garageId, canOpen, canPark)
         exports['feather-toolkit']:ClearControlHints()
         return
     end
-    local controls = {
-        { key = GarageConfig.Interact.label, label = T(canOpen and 'open_label' or 'store_label') },
-    }
+    local controls = {}
+    if canOpen then
+        controls[1] = { key = GarageConfig.Interact.open.label, label = T('open_label') }
+    end
+    if canPark then
+        controls[#controls + 1] = { key = GarageConfig.Interact.park.label, label = T('store_label') }
+    end
     exports['feather-toolkit']:SetControlHints({
         tabs = { { title = GarageConfig.Garages[garageId].label, controls = controls } },
         activeTab = 1,
@@ -152,6 +156,26 @@ RegisterNetEvent('h4nr-garages:ready', function(netId, props)
         SetVehicleEngineOn(vehicle, false, true, true)
     end)
 end)
+-- The trailer stands behind the truck either way; hitching only saves backing up to it.
+RegisterNetEvent('h4nr-garages:hitch', function(towNetId, netId, props)
+    CreateThread(function()
+        local towing = GarageConfig.Towing
+        local tow, trailer = Resolve(towNetId), Resolve(netId)
+        if not tow or not trailer then
+            return Notify('trailer_not_hitched')
+        end
+        exports['feather-toolkit']:SetVehicleProperties(trailer, props)
+        SetVehicleOnGroundProperly(trailer)
+        local deadline = GetGameTimer() + towing.attachMs
+        repeat
+            AttachVehicleToTrailer(tow, trailer, towing.attachRadius)
+            Wait(100)
+        until IsVehicleAttachedToTrailer(tow) or GetGameTimer() >= deadline
+        if not IsVehicleAttachedToTrailer(tow) then
+            Notify('trailer_not_hitched')
+        end
+    end)
+end)
 RegisterNetEvent('h4nr-garages:engine', function(netId, running)
     CreateThread(function()
         local vehicle = Resolve(netId)
@@ -185,7 +209,12 @@ local function DriveAllowed(vehicle, assetId)
     end
     return drive.allowed
 end
+-- True while G parks the running car the player drives: the engine key then stays out of it.
+local parkOffered = false
 local function Key(action)
+    if action == 'engine' and parkOffered then
+        return
+    end
     local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
     if vehicle == 0 then
         vehicle = lib.getClosestVehicle(GetEntityCoords(PlayerPedId()), 10.0, false)
@@ -237,7 +266,7 @@ CreateThread(function()
     while true do
         local pause = 500
         local ped = PlayerPedId()
-        local shownHint = false
+        local shownHint, parkHere = false, false
         GaragePanel.Watch(ped, GetEntityCoords(ped))
         if not GaragePanel.Busy() and exports['feather-character']:HasActiveCharacter() then
             local coords, vehicle = GetEntityCoords(ped), GetVehiclePedIsIn(ped, false)
@@ -250,39 +279,38 @@ CreateThread(function()
                 end
                 local near = #(coords - garage.coords) <= GarageConfig.Distance
                     or (vehicle ~= 0 and #(coords - spawn) <= 8.0)
-                local canPark = vehicle ~= 0
+                local canDrivePark = vehicle ~= 0
+                    and near
                     and GetPedInVehicleSeat(vehicle, -1) == ped
                     and Entity(vehicle).state.h4nrAssetId ~= nil
+                    and Entity(vehicle).state.h4nrGarageEngine ~= false
                 local empty, emptyAsset
                 if vehicle == 0 then
                     empty, emptyAsset = BesideVehicle(coords, garage, spawn)
                 end
-                if (empty or near and (vehicle == 0 or canPark)) and not menu:IsInputCaptured() then
+                local canOpen = vehicle == 0 and near
+                local canPark = canDrivePark or empty ~= nil
+                if (canOpen or canPark) and not menu:IsInputCaptured() then
                     pause = 0
                     shownHint = true
-                    local canOpen = vehicle == 0 and near
-                    Hint(garageId, canOpen, vehicle ~= 0 or empty ~= nil)
-                    if Pressed() then
-                        if canOpen then
-                            Hint(nil)
-                            GaragePanel.Open(garageId)
-                        elseif empty then
-                            Hint(nil)
+                    parkHere = canDrivePark
+                    Hint(garageId, canOpen, canPark)
+                    if canOpen and Pressed(GarageConfig.Interact.open) then
+                        Hint(nil)
+                        GaragePanel.Open(garageId)
+                    elseif canPark and Pressed(GarageConfig.Interact.park) then
+                        Hint(nil)
+                        if empty then
                             Park(garageId, emptyAsset, empty)
-                        elseif vehicle ~= 0 then
-                            Hint(nil)
-                            local assetId = Entity(vehicle).state.h4nrAssetId
-                            if assetId then
-                                Park(garageId, assetId, vehicle)
-                            else
-                                Notify('forbidden')
-                            end
+                        else
+                            Park(garageId, Entity(vehicle).state.h4nrAssetId, vehicle)
                         end
                     end
                     break
                 end
             end
         end
+        parkOffered = parkHere
         if not shownHint or GaragePanel.Busy() then
             Hint(nil)
         end

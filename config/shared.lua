@@ -4,8 +4,12 @@ GarageConfig = {
     ParkDistance = 30.0,
     PanelDistance = 15.0,
     BesideDistance = 5.0,
-    -- One key opens the list at the garage point and parks: R on foot (45) and in a vehicle (80).
-    Interact = { label = 'R', controls = { 45, 80 } },
+    -- E opens the list at the garage point. G parks, but only a running vehicle: with the engine
+    -- off G is the engine key (feathervehicleengine), so a car just taken out can be started.
+    Interact = {
+        open = { label = 'E', controls = { 38 } },
+        park = { label = 'G', controls = { 47 } },
+    },
     -- Metres around the spawn point that must be free of any vehicle, measured between centres.
     SpawnClearance = { vehicle = 6.0, boat = 12.0, aircraft = 20.0 },
     Marker = { type = 2, drawDistance = 25.0, scale = 0.2, color = { 0, 128, 0, 155 }, height = 1.1 },
@@ -20,6 +24,47 @@ GarageConfig = {
         scale = 0.75,
     },
     Rekey = { price = 2500, waitSeconds = 600 },
+    -- A truck from `tractors` can come out with a stored trailer from `trailers` hitched behind it.
+    -- `behind`: metres between the two centres, above SpawnClearance so the truck does not block it.
+    Towing = {
+        behind = 10.0,
+        attachRadius = 15.0,
+        attachMs = 3000,
+        tractors = {
+            hauler = true,
+            hauler2 = true,
+            packer = true,
+            phantom = true,
+            phantom3 = true,
+            phantom4 = true,
+            towtruck = true,
+            towtruck2 = true,
+            towtruck3 = true,
+            towtruck4 = true,
+        },
+        trailers = {
+            armytanker = true,
+            armytrailer = true,
+            armytrailer2 = true,
+            baletrailer = true,
+            boattrailer = true,
+            docktrailer = true,
+            freighttrailer = true,
+            tanker = true,
+            tanker2 = true,
+            tr2 = true,
+            tr3 = true,
+            tr4 = true,
+            trailerlogs = true,
+            trailers = true,
+            trailers2 = true,
+            trailers3 = true,
+            trailers4 = true,
+            trailersmall = true,
+            trflat = true,
+            tvtrailer = true,
+        },
+    },
     -- Per character. `out`: vehicles on the street at once. `owned`: vehicles held in total.
     -- A type left out of `limits` (boats, aircraft) has no limit. Purchases and sales check
     -- `owned` before any money moves; prizes and staff grants are never refused.

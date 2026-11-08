@@ -923,6 +923,35 @@ check('the second car then finds the place taken', call('retrieve', otherSpec, 2
 entities[999], coords[999] = nil, nil
 entities[pausedRetrieval.value.netId - 100] = nil
 rows.otherOrder, assetsById[otherAsset] = nil, nil
+-- A truck and a stored trailer come out together, the trailer behind the truck.
+local truckAsset, trailerAsset = '66666666-6666-6666-6666-666666666666', '77777777-7777-7777-7777-777777777777'
+for order, asset, model in ('truckOrder ' .. truckAsset .. ' hauler trailerOrder ' .. trailerAsset .. ' tanker'):gmatch('(%S+) (%S+) (%S+)') do
+    rows[order] = copy(rows[orderId])
+    rows[order].asset_id, rows[order].status = asset, 'stored'
+    assetsById[asset] = copy(assetsById[assetId])
+    assetsById[asset].assetId, assetsById[asset].modelKey = asset, model
+end
+local together = { garage = 'pillboxgarage', assetId = truckAsset, trailer = trailerAsset }
+local behindX = pillboxSpawn.x + math.sin(math.rad(pillboxSpawn.w)) * GarageConfig.Towing.behind
+local behindY = pillboxSpawn.y - math.cos(math.rad(pillboxSpawn.w)) * GarageConfig.Towing.behind
+check('a car that is no truck takes no trailer', call('retrieve', { garage = 'pillboxgarage', assetId = trailerAsset, trailer = truckAsset }).code == 'invalid_input')
+check('a truck cannot tow itself', call('retrieve', { garage = 'pillboxgarage', assetId = truckAsset, trailer = truckAsset }).code == 'forbidden')
+entities[999], coords[999] = true, vector3(behindX, behindY, pillboxSpawn.z)
+local spawnsBefore = spawnCount
+check('a blocked place behind refuses both', call('retrieve', together).code == 'spawn_blocked' and spawnCount == spawnsBefore)
+entities[999], coords[999] = nil, nil
+GarageConfig.Slots.limits.vehicle.out = 1
+check('both must fit the out slots', call('retrieve', together).code == 'out_limit' and spawnCount == spawnsBefore)
+GarageConfig.Slots.limits.vehicle.out = 3
+events = {}
+local pair = call('retrieve', together)
+check('truck and trailer come out', pair.ok and not pair.value.trailerProblem and spawnCount == spawnsBefore + 2)
+check('both are out', rows.truckOrder.status == 'out' and rows.trailerOrder.status == 'out')
+check('the driver gets the truck, then the hitch', events[#events].name == 'h4nr-garages:hitch' and events[#events].args[1] == pair.value.netId)
+local trailerEntity = events[#events].args[2] - 100
+check('the trailer stands behind the truck', math.abs(coords[trailerEntity].x - behindX) < 0.01 and math.abs(coords[trailerEntity].y - behindY) < 0.01)
+entities[pair.value.netId - 100], entities[trailerEntity] = nil, nil
+rows.truckOrder, rows.trailerOrder, assetsById[truckAsset], assetsById[trailerAsset] = nil, nil, nil, nil
 -- A car that vanished: the next retrieval replaces its key.
 check('retrieval after failures works', call('retrieve', spec).ok)
 local firstKey = activeKey()

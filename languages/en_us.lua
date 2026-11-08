@@ -16,6 +16,10 @@ Locales.en_us = {
 
     retrieve = 'Retrieve vehicle',
     swap = 'Take out and park %s',
+    retrieve_with = 'Take out with trailer %s (%s)',
+    trailer_slots_reason = 'A truck with a trailer takes two out slots.',
+    trailer_failed = 'The truck came out, but the trailer could not.',
+    trailer_not_hitched = 'The trailer is behind the truck but did not hitch. Back up to it.',
     stored = 'Stored',
     out = 'Out',
     sale_reserved = 'Reserved for sale',
