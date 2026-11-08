@@ -8,7 +8,7 @@ version '2.7.0'
 
 shared_scripts {
     '@ox_lib/init.lua',
-    '@h4nr-feather/shared.lua',
+    'shared/feather_rpc.lua',
     'config/shared.lua',
 }
 
@@ -24,6 +24,7 @@ client_scripts {
 
 server_scripts {
     '@feather-mysql/lib/DB.lua',
+    'server/vehicles.lua',
     'server/registration.lua',
     'server/keys.lua',
     'server/payments.lua',
@@ -35,7 +36,6 @@ server_scripts {
 dependencies {
     'ox_lib',
     'feather-mysql',
-    'h4nr-feather',
     'feather-core',
     'feather-assets',
     'feather-inventory',

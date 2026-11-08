@@ -6,7 +6,6 @@ Public garages for cars, boats and aircraft on the Feather Framework for FiveM. 
 
 - `feather-mysql`, `ox_lib`
 - Feather Core, Character, Assets, Inventory, Economy, Admin, Menu v2 and Notify
-- `h4nr-feather`
 - Optional: `h4nr-fuel`
 
 ## Installation
