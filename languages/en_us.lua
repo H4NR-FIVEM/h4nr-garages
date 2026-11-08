@@ -31,6 +31,7 @@ Locales.en_us = {
     spawn_blocked = 'The spawn point is occupied.',
     already_out = 'Vehicle is already out.',
     parked = 'Vehicle stored.',
+    parked_trailer_left = 'The truck is stored, but the trailer stayed out.',
     close = 'Close',
     prompt = '~INPUT_RELOAD~ Garage',
     store = '~INPUT_RELOAD~ Store vehicle',

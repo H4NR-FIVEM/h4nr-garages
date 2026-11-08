@@ -307,7 +307,7 @@ local function Run(session, garageId, assetId, entry, action)
         end
         value, code = Request('store', GarageCalls.StoreParams(garageId, assetId, NetToVeh(netId)))
         if value then
-            Notify('parked')
+            Notify(GarageCalls.ParkedMessage(value))
         end
     else
         value, code = Request('rekey', { garage = garageId, assetId = assetId, method = action.method })

@@ -28,12 +28,25 @@ function GarageCalls.Call(name, params)
     end
     return value
 end
-function GarageCalls.StoreParams(garageId, assetId, vehicle)
+local function ParkingProps(vehicle)
     local read = exports['feather-toolkit']:GetVehicleProperties(vehicle)
     -- Without properties the server refuses the parking, so nothing is lost.
     local props = read.ok and read.value or {}
     if GetResourceState('h4nr-fuel') == 'started' then
         props.fuelLevel = exports['h4nr-fuel']:GetFuel(vehicle)
     end
-    return { garage = garageId, assetId = assetId, props = props }
+    return props
+end
+-- A trailer hitched to the vehicle is parked with it; the server decides again.
+function GarageCalls.StoreParams(garageId, assetId, vehicle)
+    local params = { garage = garageId, assetId = assetId, props = ParkingProps(vehicle) }
+    local hitched, trailer = GetVehicleTrailerVehicle(vehicle)
+    local trailerAsset = hitched and trailer ~= 0 and Entity(trailer).state.h4nrAssetId
+    if trailerAsset then
+        params.trailer = { assetId = trailerAsset, props = ParkingProps(trailer) }
+    end
+    return params
+end
+function GarageCalls.ParkedMessage(value)
+    return type(value) == 'table' and value.trailerLeft and 'parked_trailer_left' or 'parked'
 end

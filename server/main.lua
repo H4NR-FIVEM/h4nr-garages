@@ -446,6 +446,71 @@ local function Retrieve(source, params)
         end, 'spawn_blocked')
     end)
 end
+-- Saves the condition, removes the entity and takes the key. Runs under the asset's lock.
+local function ParkEntity(assetId, vehicle, garageId, read, props)
+    if type(props) ~= 'table' then
+        return Garage.Err('invalid_input')
+    end
+    props.model, props.plate = joaat(read.value.modelKey), read.value.identifiers.plate
+    for key, range in pairs({ engineHealth = { -4000, 1000 }, bodyHealth = { 0, 1000 }, fuelLevel = { 0, 100 } }) do
+        if
+            type(props[key]) ~= 'number'
+            or props[key] ~= props[key]
+            or props[key] < range[1]
+            or props[key] > range[2]
+        then
+            return Garage.Err('invalid_input')
+        end
+    end
+    local encoded = json.encode(props)
+    if #encoded > 16384 then
+        return Garage.Err('invalid_input')
+    end
+    -- Persist before deletion. Recovery never marks a surviving entity stored.
+    DB.exec(
+        [[UPDATE h4nr_feather_vehicles SET props_json = ?, garage = ?, status = 'storing'
+        WHERE asset_id = ?]],
+        encoded,
+        garageId,
+        assetId
+    )
+    DeleteEntity(vehicle)
+    local deadline = GetGameTimer() + 3000
+    while DoesEntityExist(vehicle) and GetGameTimer() < deadline do
+        Wait(50)
+    end
+    if DoesEntityExist(vehicle) then
+        DB.exec("UPDATE h4nr_feather_vehicles SET status = 'out' WHERE asset_id = ?", assetId)
+        return Garage.Err('unavailable')
+    end
+    live[assetId] = nil
+    GarageKeys.Void(assetId)
+    DB.exec("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ?", assetId)
+    return Garage.Ok(true)
+end
+-- The trailer the client says is hitched: it must be the player's to operate and still by the truck.
+local function ParkTrailer(source, truckAssetId, garageId, garage, request, truckAt)
+    local assetId = type(request) == 'table' and request.assetId
+    if assetId == truckAssetId or not CanOperate(source, assetId) then
+        return Garage.Err('forbidden')
+    end
+    return Garage.Lock(assetId, function()
+        local vehicle = Vehicle(assetId)
+        local read = assets:GetAsset({ assetId = assetId })
+        if
+            not vehicle
+            or not read.ok
+            or read.value.assetType ~= garage.assetType
+            or not GarageConfig.Towing.trailers[read.value.modelKey:lower()]
+            or GetPedInVehicleSeat(vehicle, -1) ~= 0
+            or GetEntityRoutingBucket(vehicle) ~= 0
+            or #(GetEntityCoords(vehicle) - truckAt) > GarageConfig.Towing.parkReach
+        then
+            return Garage.Err('forbidden')
+        end
+        return ParkEntity(assetId, vehicle, garageId, read, request.props)
+    end)
+end
 local function Store(source, params)
     local garage = GarageConfig.Garages[params.garage]
     if not garage or GetPlayerRoutingBucket(source) ~= 0 then
@@ -476,46 +541,15 @@ local function Store(source, params)
         then
             return Garage.Err('forbidden')
         end
-        if type(params.props) ~= 'table' then
-            return Garage.Err('invalid_input')
-        end
-        local props = params.props
-        props.model, props.plate = joaat(read.value.modelKey), read.value.identifiers.plate
-        for key, range in pairs({ engineHealth = { -4000, 1000 }, bodyHealth = { 0, 1000 }, fuelLevel = { 0, 100 } }) do
-            if
-                type(props[key]) ~= 'number'
-                or props[key] ~= props[key]
-                or props[key] < range[1]
-                or props[key] > range[2]
-            then
-                return Garage.Err('invalid_input')
+        local truckAt = GetEntityCoords(vehicle)
+        local parked = ParkEntity(params.assetId, vehicle, params.garage, read, params.props)
+        if parked.ok and params.trailer ~= nil then
+            local trailer = ParkTrailer(source, params.assetId, params.garage, garage, params.trailer, truckAt)
+            if not trailer.ok then
+                return Garage.Ok({ trailerLeft = true })
             end
         end
-        local encoded = json.encode(props)
-        if #encoded > 16384 then
-            return Garage.Err('invalid_input')
-        end
-        -- Persist before deletion. Recovery never marks a surviving entity stored.
-        DB.exec(
-            [[UPDATE h4nr_feather_vehicles SET props_json = ?, garage = ?, status = 'storing'
-            WHERE asset_id = ?]],
-            encoded,
-            params.garage,
-            params.assetId
-        )
-        DeleteEntity(vehicle)
-        local deadline = GetGameTimer() + 3000
-        while DoesEntityExist(vehicle) and GetGameTimer() < deadline do
-            Wait(50)
-        end
-        if DoesEntityExist(vehicle) then
-            DB.exec("UPDATE h4nr_feather_vehicles SET status = 'out' WHERE asset_id = ?", params.assetId)
-            return Garage.Err('unavailable')
-        end
-        live[params.assetId] = nil
-        GarageKeys.Void(params.assetId)
-        DB.exec("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ?", params.assetId)
-        return Garage.Ok(true)
+        return parked
     end)
 end
 local function Keys(source, params)
@@ -684,6 +718,39 @@ for name, handler in pairs({
         respond(ok and result or Garage.Err('unavailable'))
     end)
 end
+-- Takes the key of a vehicle that vanished from the street. Two misses in a row, so a vehicle
+-- changing hands for a moment keeps its key; only 'out' rows, because others are mid-operation.
+local missingKeys = {}
+function Garage.VoidLostKeys()
+    local missing = {}
+    for _, assetId in ipairs(GarageKeys.ActiveAssets()) do
+        local row = not Vehicle(assetId) and Garage.Row(assetId)
+        if row and row.status == 'out' then
+            if missingKeys[assetId] then
+                Garage.Lock(assetId, function()
+                    local current = Garage.Row(assetId)
+                    if not Vehicle(assetId) and current and current.status == 'out' then
+                        GarageKeys.Void(assetId)
+                    end
+                    return Garage.Ok(true)
+                end)
+            else
+                missing[assetId] = true
+            end
+        end
+    end
+    missingKeys = missing
+end
+local function CheckLostKeys()
+    if Garage.ready then
+        local ok, problem = pcall(Garage.VoidLostKeys)
+        if not ok then
+            print('[h4nr-garages] lost key check failed: ' .. tostring(problem))
+        end
+    end
+    SetTimeout(GarageConfig.Key.lostCheckMs, CheckLostKeys)
+end
+SetTimeout(GarageConfig.Key.lostCheckMs, CheckLostKeys)
 CreateThread(function()
     local ok, problem = pcall(function()
         Garage.Migrate()

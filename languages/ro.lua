@@ -31,6 +31,7 @@ Locales.ro = {
     spawn_blocked = 'Locul de scoatere este ocupat.',
     already_out = 'Vehiculul este deja scos.',
     parked = 'Vehicul parcat.',
+    parked_trailer_left = 'Camionul a fost parcat, dar remorca a rămas afară.',
     close = 'Închide',
     prompt = '~INPUT_RELOAD~ Garaj',
     store = '~INPUT_RELOAD~ Parchează vehiculul',

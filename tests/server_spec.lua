@@ -447,6 +447,7 @@ function CreateThread(fn)
     threads[#threads + 1] = fn
 end
 function Wait() end
+function SetTimeout() end
 local eventHandlers = {}
 function AddEventHandler(name, fn)
     eventHandlers[name] = fn
@@ -950,6 +951,32 @@ check('both are out', rows.truckOrder.status == 'out' and rows.trailerOrder.stat
 check('the driver gets the truck, then the hitch', events[#events].name == 'h4nr-garages:hitch' and events[#events].args[1] == pair.value.netId)
 local trailerEntity = events[#events].args[2] - 100
 check('the trailer stands behind the truck', math.abs(coords[trailerEntity].x - behindX) < 0.01 and math.abs(coords[trailerEntity].y - behindY) < 0.01)
+-- Parking the truck parks the trailer hitched to it and takes both keys.
+local truckEntity, heldAt = pair.value.netId - 100, coords[1]
+local parkProps = function() return { engineHealth = 900, bodyHealth = 800, fuelLevel = 55 } end
+local atSpawn = vector3(pillboxSpawn.x, pillboxSpawn.y, pillboxSpawn.z)
+coords[1], coords[truckEntity], drivers[truckEntity], drivers[trailerEntity] = atSpawn, atSpawn, 1, 0
+local storeBoth = { garage = 'pillboxgarage', assetId = truckAsset, props = parkProps(),
+    trailer = { assetId = trailerAsset, props = parkProps() } }
+local both = call('store', storeBoth)
+check('the hitched trailer is parked with the truck', both.ok and both.value == true and rows.truckOrder.status == 'stored' and rows.trailerOrder.status == 'stored')
+check('both keys are taken', keyRows[truckAsset].status == 'void' and keyRows[trailerAsset].status == 'void')
+pair = call('retrieve', together)
+truckEntity, trailerEntity = pair.value.netId - 100, events[#events].args[2] - 100
+coords[truckEntity], drivers[truckEntity], drivers[trailerEntity] = atSpawn, 1, 0
+coords[trailerEntity] = vector3(atSpawn.x + 500.0, atSpawn.y, atSpawn.z)
+storeBoth.props, storeBoth.trailer.props = parkProps(), parkProps()
+local left = call('store', storeBoth)
+check('a trailer far from the truck stays out and the driver is told', left.ok and left.value.trailerLeft == true and rows.trailerOrder.status == 'out' and keyRows[trailerAsset].status == 'active')
+-- A vehicle gone from the street loses its key, but not on one missed check.
+Garage.VoidLostKeys()
+check('a live trailer keeps its key', keyRows[trailerAsset].status == 'active')
+entities[trailerEntity] = nil
+Garage.VoidLostKeys()
+check('one miss keeps the key', keyRows[trailerAsset].status == 'active')
+Garage.VoidLostKeys()
+check('a second miss takes the key', keyRows[trailerAsset].status == 'void')
+coords[1] = heldAt
 entities[pair.value.netId - 100], entities[trailerEntity] = nil, nil
 rows.truckOrder, rows.trailerOrder, assetsById[truckAsset], assetsById[trailerAsset] = nil, nil, nil, nil
 -- A car that vanished: the next retrieval replaces its key.

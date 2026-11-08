@@ -81,8 +81,9 @@ local function Marker(garage, driving, at)
     )
 end
 local function Park(garageId, assetId, vehicle)
-    if Call('store', GarageCalls.StoreParams(garageId, assetId, vehicle)) then
-        Notify('parked')
+    local value = Call('store', GarageCalls.StoreParams(garageId, assetId, vehicle))
+    if value then
+        Notify(GarageCalls.ParkedMessage(value))
     end
 end
 -- The empty vehicle the player stands beside, if it is in this garage's range and they hold its

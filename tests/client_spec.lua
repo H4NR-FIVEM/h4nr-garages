@@ -178,6 +178,9 @@ function DoesEntityExist()
     return true
 end
 vehicleState = { h4nrAssetId = '11111111-1111-1111-1111-111111111111', h4nrGarageEngine = true }
+function GetVehicleTrailerVehicle()
+    return false, 0
+end
 function Entity()
     return { state = vehicleState }
 end

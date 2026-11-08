@@ -28,6 +28,8 @@ GarageConfig = {
     -- `behind`: metres between the two centres, above SpawnClearance so the truck does not block it.
     Towing = {
         behind = 10.0,
+        -- Metres between truck and trailer centres within which the trailer is parked with the truck.
+        parkReach = 20.0,
         attachRadius = 15.0,
         attachMs = 3000,
         tractors = {
@@ -78,6 +80,8 @@ GarageConfig = {
     },
     Key = {
         checkMs = 3000,
+        -- A vehicle missing from the street on two checks in a row loses its key.
+        lostCheckMs = 30000,
         label = 'Cheie · %s',
         destroyRefused = 'Cheia mașinii nu poate fi aruncată. Parchează mașina sau recuperează cheia la garaj.',
     },
