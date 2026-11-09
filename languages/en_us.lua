@@ -87,4 +87,12 @@ Locales.en_us = {
     slot_confirm = 'Confirm payment',
     slot_bought = 'Premium slot added.',
     slots_premium = 'Premium',
+    wreck_status = 'Burnt out',
+    wreck_recover = 'Bring to the service',
+    wreck_wait_reason = 'The service can only take it once the time is up.',
+    wreck_ready_reason = 'The service returns it to the garage, as it was when last parked.',
+    wreck_recovered = 'The car is in the garage, as it was when last parked.',
+    wreck_waiting = 'You still have to wait before bringing it to the service.',
+    not_wrecked = 'The car is no longer a wreck.',
+    wrecked = 'A burnt-out car cannot be parked. Bring it to the service from the garage.',
 }

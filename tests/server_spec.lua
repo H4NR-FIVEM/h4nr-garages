@@ -579,6 +579,10 @@ end
 function GetVehicleType()
     return 'automobile'
 end
+local engineHealth = {}
+function GetVehicleEngineHealth(entity)
+    return engineHealth[entity] or 1000.0
+end
 local refuseDelete = false
 function DeleteEntity(entity)
     if not refuseDelete then
@@ -1085,6 +1089,33 @@ end
 check('recovery destroys the key wherever it is', not instances[lostKey] and not activeKey())
 check('recovery returns the car to the garage', rows[orderId].status == 'stored' and not entities[recoverCar])
 check('the next retrieval issues a new key', call('retrieve', spec).ok and activeKey() ~= lostKey and instances[activeKey()].inventoryId == 1)
+-- A burnt-out vehicle -----------------------------------------------------------
+local burnt = next(entities)
+local wreckSpec = { garage = 'pillboxgarage', assetId = assetId }
+drivers[burnt] = 0
+check('a healthy car is no wreck', call('recoverWreck', wreckSpec).code == 'not_wrecked')
+local savedProps = rows[orderId].props_json
+engineHealth[burnt] = -4000.0
+Garage.CheckWrecks()
+check('the wait is shown from the moment it burns', rekeyItem().wreck == 1200)
+check('a wreck is not offered for parking', rekeyItem().parkNetId == nil)
+check('a wreck cannot be parked over its good state', call('store', spec).code == 'wrecked' and rows[orderId].props_json == savedProps)
+check('a stranger cannot recover it', call('recoverWreck', wreckSpec, 2).code == 'forbidden')
+check('it cannot be recovered early', call('recoverWreck', wreckSpec).code == 'wreck_waiting' and entities[burnt])
+engineHealth[burnt] = 500.0
+Garage.CheckWrecks()
+check('a repaired car stops counting', rekeyItem().wreck == nil and call('recoverWreck', wreckSpec).code == 'not_wrecked')
+engineHealth[burnt] = -4000.0
+Garage.CheckWrecks()
+fakeNow = fakeNow + 1200
+check('after the wait it can go', rekeyItem().wreck == 0)
+refuseDelete = true
+check('a wreck that will not go stays out', call('recoverWreck', wreckSpec).code == 'unavailable' and rows[orderId].status == 'out')
+refuseDelete = false
+check('the service takes it', call('recoverWreck', wreckSpec).ok)
+check('the wreck is gone and the car is stored', not entities[burnt] and rows[orderId].status == 'stored' and not activeKey())
+check('its last good state is kept', rows[orderId].props_json == savedProps)
+check('it comes out again', call('retrieve', spec).ok and rows[orderId].status == 'out')
 os.time = realTime
 -- Sale reservation and transfer ------------------------------------------------
 local saleId = '66666666-6666-6666-6666-666666666666'

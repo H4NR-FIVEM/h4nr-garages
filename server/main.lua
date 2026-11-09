@@ -137,6 +137,18 @@ local function SpawnProps(props)
     end
     return copy
 end
+local function IsWrecked(vehicle)
+    return GetVehicleEngineHealth(vehicle) <= GarageConfig.Wreck.engineHealth
+end
+-- Seconds until a wreck can go to the service, 0 when it can, nil for a vehicle that is no wreck.
+-- The start lives on the entity, so it survives restarting this resource and ends with the wreck.
+local function WreckSeconds(vehicle)
+    local since = Entity(vehicle).state.h4nrWreckedAt
+    if not since or not IsWrecked(vehicle) then
+        return nil
+    end
+    return math.max(0, since + GarageConfig.Wreck.waitSeconds - os.time())
+end
 -- The state of the last parking, as percentages. A vehicle never parked has none of these.
 local function Condition(encoded)
     local ok, props = pcall(json.decode, encoded)
@@ -178,13 +190,16 @@ local function List(source, params)
         local row = Garage.Row(asset.assetId)
         if row and row.status ~= 'registering' then
             local vehicle = row.status == 'out' and asset.status == 'active' and Vehicle(asset.assetId)
+            local wreck = vehicle and WreckSeconds(vehicle) or nil
             local parkable = vehicle
+                and not wreck
                 and GetPedInVehicleSeat(vehicle, -1) == 0
                 and GetEntityRoutingBucket(vehicle) == 0
                 and InParkRange(garage, vehicle)
             items[#items + 1] = {
                 assetId = asset.assetId,
                 parkNetId = parkable and NetworkGetNetworkIdFromEntity(vehicle) or nil,
+                wreck = wreck,
                 model = asset.modelKey,
                 plate = asset.identifiers.plate,
                 garage = row.garage,
@@ -451,6 +466,10 @@ local function ParkEntity(assetId, vehicle, garageId, read, props)
     if type(props) ~= 'table' then
         return Garage.Err('invalid_input')
     end
+    -- Parking would save the burnt state over the last good one.
+    if IsWrecked(vehicle) then
+        return Garage.Err('wrecked')
+    end
     props.model, props.plate = joaat(read.value.modelKey), read.value.identifiers.plate
     for key, range in pairs({ engineHealth = { -4000, 1000 }, bodyHealth = { 0, 1000 }, fuelLevel = { 0, 100 } }) do
         if
@@ -679,6 +698,40 @@ local function CanDrive(source, params)
     local allowed = CanOperate(source, params.assetId)
     return Garage.Ok({ allowed = allowed })
 end
+-- Removes the wreck and puts the vehicle back as stored. Its last saved state is left untouched,
+-- so it comes out the way it was before it burnt.
+local function RecoverWreck(source, params)
+    local garage = AtGarage(source, params.garage)
+    if not garage or not Owns(source, params.assetId) then
+        return Garage.Err('forbidden')
+    end
+    return Garage.Lock(params.assetId, function()
+        local vehicle = Vehicle(params.assetId)
+        local seconds = vehicle and WreckSeconds(vehicle)
+        if not seconds then
+            return Garage.Err('not_wrecked')
+        end
+        if seconds > 0 then
+            return Garage.Err('wreck_waiting')
+        end
+        local read = assets:GetAsset({ assetId = params.assetId })
+        if not read.ok or read.value.assetType ~= garage.assetType then
+            return Garage.Err('invalid_garage')
+        end
+        DeleteEntity(vehicle)
+        local deadline = GetGameTimer() + 3000
+        while DoesEntityExist(vehicle) and GetGameTimer() < deadline do
+            Wait(50)
+        end
+        if DoesEntityExist(vehicle) then
+            return Garage.Err('unavailable')
+        end
+        live[params.assetId] = nil
+        GarageKeys.Void(params.assetId)
+        DB.exec("UPDATE h4nr_feather_vehicles SET status = 'stored' WHERE asset_id = ?", params.assetId)
+        return Garage.Ok(true)
+    end)
+end
 for name, handler in pairs({
     canDrive = CanDrive,
     list = List,
@@ -687,6 +740,7 @@ for name, handler in pairs({
     store = Store,
     keys = Keys,
     rekey = Rekey,
+    recoverWreck = RecoverWreck,
     buySlot = BuySlot,
 }) do
     local operation = handler
@@ -751,6 +805,29 @@ local function CheckLostKeys()
     SetTimeout(GarageConfig.Key.lostCheckMs, CheckLostKeys)
 end
 SetTimeout(GarageConfig.Key.lostCheckMs, CheckLostKeys)
+-- Starts a wreck's wait when it burns, whether or not anyone has the garage open. A vehicle
+-- repaired in the meantime starts over if it burns again.
+function Garage.CheckWrecks()
+    for _, vehicle in ipairs(GetAllVehicles()) do
+        local state = Entity(vehicle).state
+        if state.h4nrAssetId then
+            local wrecked = IsWrecked(vehicle)
+            if wrecked and not state.h4nrWreckedAt then
+                state:set('h4nrWreckedAt', os.time(), true)
+            elseif not wrecked and state.h4nrWreckedAt then
+                state:set('h4nrWreckedAt', nil, true)
+            end
+        end
+    end
+end
+local function WatchWrecks()
+    local ok, problem = pcall(Garage.CheckWrecks)
+    if not ok then
+        print('[h4nr-garages] wreck check failed: ' .. tostring(problem))
+    end
+    SetTimeout(GarageConfig.Wreck.checkMs, WatchWrecks)
+end
+SetTimeout(GarageConfig.Wreck.checkMs, WatchWrecks)
 CreateThread(function()
     local ok, problem = pcall(function()
         Garage.Migrate()

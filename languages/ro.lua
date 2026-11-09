@@ -87,4 +87,12 @@ Locales.ro = {
     slot_confirm = 'Confirmă plata',
     slot_bought = 'Loc premium adăugat.',
     slots_premium = 'Premium',
+    wreck_status = 'Distrusă de foc',
+    wreck_recover = 'Adu la service',
+    wreck_wait_reason = 'Service-ul o poate prelua doar după ce trece timpul.',
+    wreck_ready_reason = 'Service-ul o readuce în garaj, cum era la ultima parcare.',
+    wreck_recovered = 'Mașina este în garaj, cum era la ultima parcare.',
+    wreck_waiting = 'Trebuie să mai aștepți până o poți aduce la service.',
+    not_wrecked = 'Mașina nu mai este o epavă.',
+    wrecked = 'O mașină distrusă nu poate fi parcată. Adu-o la service din garaj.',
 }

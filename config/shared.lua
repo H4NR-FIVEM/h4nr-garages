@@ -24,6 +24,9 @@ GarageConfig = {
         scale = 0.75,
     },
     Rekey = { price = 2500, waitSeconds = 600 },
+    -- A burnt-out vehicle: at or below this engine health it counts as a wreck, and after
+    -- `waitSeconds` the owner can send it to the service, which returns it to the garage.
+    Wreck = { engineHealth = -3900.0, waitSeconds = 1200, checkMs = 10000 },
     -- A truck from `tractors` can come out with a stored trailer from `trailers` hitched behind it.
     -- `behind`: metres between the two centres, above SpawnClearance so the truck does not block it.
     Towing = {

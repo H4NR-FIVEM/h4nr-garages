@@ -75,6 +75,12 @@ local function Retrieval(item, old, slots, trailers)
 end
 -- Status line, why nothing can be done (when so) and the buttons of one vehicle.
 local function Describe(item, price, old, slots, trailers)
+    if item.wreck then
+        if item.wreck > 0 then
+            return T('wreck_status'), 'warn', T('wreck_wait_reason'), { Action('wreck', T('wreck_recover'), { disabled = true, countdown = true }) }
+        end
+        return T('wreck_status'), 'warn', T('wreck_ready_reason'), { Action('wreck', T('wreck_recover')) }
+    end
     if item.rekey then
         if item.rekey.state == 'waiting' then
             local minutes = math.ceil(item.rekey.seconds / 60)
@@ -143,6 +149,7 @@ local function View(items, price, garageId, slots)
             status = status,
             tone = tone,
             reason = reason,
+            countdown = item.wreck and item.wreck > 0 and item.wreck or nil,
             condition = item.condition,
             group = group,
             nearby = actions[1] ~= nil and actions[1].id == 'park',
@@ -309,6 +316,12 @@ local function Run(session, garageId, assetId, entry, action)
         if value then
             Notify(GarageCalls.ParkedMessage(value))
         end
+    elseif action.id == 'wreck' then
+        value, code = Request('recoverWreck', { garage = garageId, assetId = assetId })
+        if value then
+            Reload(session, garageId)
+            return { ok = true, message = Message('wreck_recovered') }
+        end
     else
         value, code = Request('rekey', { garage = garageId, assetId = assetId, method = action.method })
         if value then
@@ -361,6 +374,16 @@ RegisterNUICallback('action', function(data, cb)
         end
         cb(result)
     end)
+end)
+-- A countdown on the page reached zero: the server decides whether the button opens.
+RegisterNUICallback('refresh', function(data, cb)
+    cb({ ok = true })
+    if panel and type(data) == 'table' and data.session == panel.session and not panel.pending then
+        local current = panel
+        CreateThread(function()
+            Reload(current.session, current.garage)
+        end)
+    end
 end)
 -- A premium slot. The page asks for confirmation before it calls this.
 RegisterNUICallback('slot', function(data, cb)

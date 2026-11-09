@@ -40,6 +40,14 @@
     const usable = shown.find((item) => item.actions.some((action) => !action.disabled));
     selected = (usable || shown[0] || {}).id ?? null;
   }
+  const clock = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  const timed = (item, text) => (item.countdown > 0 ? `${text} · ${clock(item.countdown)}` : text);
+  function markTimer(element, item, text) {
+    if (item.countdown > 0) {
+      element.dataset.timer = item.id;
+      element.dataset.base = text;
+    }
+  }
   function bar(label, value) {
     const element = node('span', `bar${value <= 25 ? ' danger' : value <= 50 ? ' warn' : ''}`);
     const head = node('span', 'bar-head');
@@ -58,7 +66,9 @@
     button.setAttribute('aria-pressed', String(item.id === selected));
     const top = node('span', 'row-top');
     top.append(node('span', 'name', item.name), node('span', 'plate', item.plate));
-    button.append(top, node('span', `status ${item.tone}`, item.status));
+    const status = node('span', `status ${item.tone}`, timed(item, item.status));
+    markTimer(status, item, item.status);
+    button.append(top, status);
     const condition = item.condition || {};
     const parts = [['engine', condition.engine], ['body', condition.body], ['fuel', condition.fuel]].filter((part) => typeof part[1] === 'number');
     if (parts.length) {
@@ -130,7 +140,8 @@
       host.append(label);
     }
     buttons(shown).forEach((action, index) => {
-      const button = node('button', index === 0 ? 'primary' : 'secondary', action.label);
+      const button = node('button', index === 0 ? 'primary' : 'secondary', action.countdown ? timed(shown, action.label) : action.label);
+      if (action.countdown) markTimer(button, shown, action.label);
       button.type = 'button';
       button.disabled = busy || Boolean(action.disabled);
       button.addEventListener('click', () => run(shown, action));
@@ -274,5 +285,19 @@
       if (document.activeElement) document.activeElement.blur();
     }
   });
+  // Only the text changes, so a tick never takes the focus or the scroll position away.
+  setInterval(() => {
+    if (session === null) return;
+    let finished = false;
+    for (const item of items) {
+      if (!(item.countdown > 0)) continue;
+      item.countdown -= 1;
+      finished = finished || item.countdown === 0;
+      for (const element of document.querySelectorAll('[data-timer]')) {
+        if (element.dataset.timer === item.id) element.textContent = timed(item, element.dataset.base);
+      }
+    }
+    if (finished) post('refresh', { session }).catch(() => {});
+  }, 1000);
   post('ready').catch(() => {});
 })();

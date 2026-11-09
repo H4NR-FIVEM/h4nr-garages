@@ -668,4 +668,13 @@ function IsVehicleAttachedToTrailer()
 end
 netEvents['h4nr-garages:hitch'](12, 13, { engineHealth = 900 })
 check('the trailer is hitched to the truck', attached.tow == 1012 and attached.trailer == 1013)
+-- A burnt-out vehicle
+view = open({ vehicle({ wreck = 600 }) })
+check('a waiting wreck shows the countdown', view.items[1].countdown == 600 and view.items[1].status == T('wreck_status'))
+check('and its button is closed', view.items[1].actions[1].id == 'wreck' and view.items[1].actions[1].disabled == true
+    and view.items[1].actions[1].countdown == true)
+view = open({ vehicle({ wreck = 0 }) })
+check('a ready wreck can go to the service', view.items[1].countdown == nil and view.items[1].actions[1].id == 'wreck'
+    and not view.items[1].actions[1].disabled)
+GaragePanel.Close()
 print(('client_spec: %d checks passed'):format(passed))
