@@ -165,10 +165,10 @@ local function Condition(encoded)
         fuel = Percent(props.fuelLevel, 100),
     }
 end
-local function List(source, params)
-    local garage = AtGarage(source, params.garage)
+local function List(source, params, remote)
+    local garage = not remote and AtGarage(source, params.garage) or nil
     local character = Character(source)
-    if not garage or not character then
+    if (not remote and not garage) or not character then
         return Garage.Err('too_far')
     end
     if params.cursor ~= nil and (type(params.cursor) ~= 'string' or #params.cursor > 256) then
@@ -177,7 +177,7 @@ local function List(source, params)
     local result = assets:ListAssetsByHolder({
         holderType = 'character',
         holderId = character,
-        assetType = garage.assetType,
+        assetType = garage and garage.assetType or nil,
         limit = 20,
         cursor = params.cursor,
     })
@@ -188,10 +188,10 @@ local function List(source, params)
     local held = GarageKeys.Held(character)
     for _, asset in ipairs(result.value.items) do
         local row = Garage.Row(asset.assetId)
-        if row and row.status ~= 'registering' then
+        if row and row.status ~= 'registering' and asset.managerResource == 'h4nr-garages' then
             local vehicle = row.status == 'out' and asset.status == 'active' and Vehicle(asset.assetId)
             local wreck = vehicle and WreckSeconds(vehicle) or nil
-            local parkable = vehicle
+            local parkable = not remote and vehicle
                 and not wreck
                 and GetPedInVehicleSeat(vehicle, -1) == 0
                 and GetEntityRoutingBucket(vehicle) == 0
@@ -201,8 +201,15 @@ local function List(source, params)
                 parkNetId = parkable and NetworkGetNetworkIdFromEntity(vehicle) or nil,
                 wreck = wreck,
                 model = asset.modelKey,
+                assetType = asset.assetType,
                 plate = asset.identifiers.plate,
                 garage = row.garage,
+                garageLabel = GarageConfig.Garages[row.garage] and GarageConfig.Garages[row.garage].label or row.garage,
+                garageCoords = GarageConfig.Garages[row.garage] and {
+                    x = GarageConfig.Garages[row.garage].coords.x,
+                    y = GarageConfig.Garages[row.garage].coords.y,
+                    z = GarageConfig.Garages[row.garage].coords.z,
+                } or nil,
                 state = row.status,
                 onStreet = vehicle and true or false,
                 condition = row.status == 'stored' and Condition(row.props_json) or nil,
@@ -212,7 +219,7 @@ local function List(source, params)
         end
     end
     -- Slots go with the first page only: the panel reads them once per refresh.
-    local slots = not params.cursor and GarageSlots.Snapshot(character, garage.assetType, Vehicle) or nil
+    local slots = not remote and not params.cursor and GarageSlots.Snapshot(character, garage.assetType, Vehicle) or nil
     return Garage.Ok({
         items = items,
         nextCursor = result.value.nextCursor,
@@ -220,6 +227,54 @@ local function List(source, params)
         slots = slots and slots.limited and slots or nil,
     })
 end
+-- Phone reads the existing garage projection remotely; take-out/park rules stay local.
+exports('GetPhoneVehicleLocation', function(src, assetId)
+    if GetInvokingResource() ~= 'h4nr-phone' or not Garage.ready then
+        return Garage.Err('forbidden')
+    end
+    local session = core:GetSessionContext(src)
+    if not session.ok or not Owns(src, assetId) then
+        return Garage.Err('forbidden')
+    end
+    local entity = Vehicle(assetId)
+    local row = Garage.Row(assetId)
+    if
+        not entity
+        or not row
+        or row.status ~= 'out'
+        or GetEntityRoutingBucket(entity) ~= GetPlayerRoutingBucket(src)
+    then
+        return Garage.Err('not_out')
+    end
+    if not core:IsSessionCurrent(src, session.value.sessionId, session.value.characterId) then
+        return Garage.Err('session_expired')
+    end
+    local coords = GetEntityCoords(entity)
+    return Garage.Ok({ coords = { x = coords.x, y = coords.y, z = coords.z } })
+end)
+exports('ListPhoneVehicles', function(src, cursor)
+    if GetInvokingResource() ~= 'h4nr-phone' then
+        return Garage.Err('forbidden')
+    end
+    if not Garage.ready then
+        return Garage.Err('unavailable')
+    end
+    local session = core:GetSessionContext(src)
+    if not session.ok or not session.value.characterId then
+        return Garage.Err('forbidden')
+    end
+    local result = List(src, { cursor = cursor }, true)
+    if not core:IsSessionCurrent(src, session.value.sessionId, session.value.characterId) then
+        return Garage.Err('session_expired')
+    end
+    if result.ok then
+        for _, item in ipairs(result.value.items) do
+            item.rekey, item.parkNetId = nil, nil
+        end
+    end
+    return result
+end)
+
 -- Coordinates are resolved server-side from current ownership, even when the
 -- entity is outside the owner's streaming range. No arbitrary holder is accepted.
 local function Locations(source, params)

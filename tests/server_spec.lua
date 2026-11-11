@@ -1243,4 +1243,27 @@ assetsById[assetId].status = 'active'
 check('a live vehicle counts', api.CountVehiclesByModel({ modelKey = rows[orderId].model_key }).value.count == 1)
 assetsById[assetId].status = 'retired'
 check('another model has none', api.CountVehiclesByModel({ modelKey = 'nothing' }).value.count == 0)
+-- Phone reads the same vehicle state away from the garage, without mutation options.
+caller = 'evil'
+check('phone list denies other resources', api.ListPhoneVehicles(2).code == 'forbidden')
+caller = 'h4nr-phone'
+local currentSession = true
+core.IsSessionCurrent = function()
+    return currentSession
+end
+assetsById[assetId].status = 'active'
+assetsById[assetId].owner = { holderType = 'character', holderId = B }
+assetsById[assetId].managerResource = 'h4nr-garages'
+rows[orderId].status = 'stored'
+local overview = api.ListPhoneVehicles(2)
+check('phone list works away from the garage', overview.ok and #overview.value.items == 1)
+check('phone list keeps the true parking state', overview.value.items[1].state == rows[orderId].status)
+check(
+    'phone cannot request rekey/parking through its list',
+    overview.value.items[1].rekey == nil and overview.value.items[1].parkNetId == nil
+)
+check('another character cannot locate this car', api.GetPhoneVehicleLocation(1, assetId).code == 'forbidden')
+currentSession = false
+check('phone list rejects a changed session', api.ListPhoneVehicles(2).code == 'session_expired')
+
 print(('server_spec: %d checks passed'):format(passed))
